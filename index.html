@@ -5,134 +5,138 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bakeshop Verified Cam</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #viewfinder { width: 100%; flex-grow: 1; background: #000; object-fit: cover; }
-        .ui-panel { background: #2d2d2d; padding: 15px; border-top: 2px solid #ff6600; text-align: center; }
-        select { width: 90%; padding: 12px; margin-bottom: 10px; border-radius: 5px; font-size: 16px; background: #444; color: white; border: 1px solid #666; }
-        #snap-btn { background: #ff6600; color: white; border: none; padding: 15px 40px; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(255,102,0,0.4); }
-        #snap-btn:active { transform: scale(0.95); background: #e65c00; }
-        #status { font-size: 12px; margin-top: 10px; color: #aaa; }
-        canvas { display: none; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica; background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #viewfinder { width: 100%; height: 60vh; object-fit: cover; background: #000; border-bottom: 2px solid #ff6600; }
+        .controls { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: space-around; background: #222; }
+        select { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #333; color: white; font-size: 16px; margin-bottom: 10px; }
+        #capture-btn { background: #ff6600; border: none; color: white; width: 85px; height: 85px; border-radius: 50%; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 0 20px rgba(255,102,0,0.4); active { transform: scale(0.95); } }
+        #status { font-size: 13px; color: #aaa; margin-top: 5px; }
+        #canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <video id="viewfinder" autoplay playsinline muted></video>
-
-    <canvas id="outputCanvas"></canvas>
-
-    <div class="ui-panel">
+    <video id="viewfinder" autoplay playsinline muted webkit-playsinline></video>
+    
+    <div class="controls">
         <select id="branchSelect">
-            <option disabled selected>-- Select Your Branch --</option>
-            <option>BK-01 Manila</option>
-            <option>BK-02 Quezon City</option>
-            </select>
-        <br>
-        <button id="snap-btn">CAPTURE & SYNC</button>
-        <div id="status">Ready (GPS: Locating...)</div>
+            <option value="BK-ADMIN">-- Select Branch --</option>
+            <option value="BK-01-Manila">BK-01 Manila</option>
+            <option value="BK-02-QC">BK-02 Quezon City</option>
+            <option value="BK-03-Makati">BK-03 Makati</option>
+        </select>
+
+        <button id="capture-btn">SNAP & SYNC</button>
+        <div id="status">System Ready</div>
     </div>
+
+    <canvas id="canvas"></canvas>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
         import { getDatabase, ref as dbRef, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // === REPLACE WITH YOUR PROJECT CONFIG ===
+        // --- PASTE YOUR FIREBASE CONFIG FROM GOOGLE CONSOLE HERE ---
         const firebaseConfig = {
-            apiKey: "PASTE_HERE",
-            authDomain: "PASTE_HERE",
-            databaseURL: "PASTE_HERE",
-            projectId: "PASTE_HERE",
-            storageBucket: "PASTE_HERE",
-            messagingSenderId: "PASTE_HERE",
-            appId: "PASTE_HERE"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID",
+            databaseURL: "YOUR_DATABASE_URL"
         };
 
         const app = initializeApp(firebaseConfig);
         const storage = getStorage(app);
-        const db = getDatabase(app);
+        const database = getDatabase(app);
 
         const video = document.getElementById('viewfinder');
-        const canvas = document.getElementById('outputCanvas');
-        const statusText = document.getElementById('status');
-        let userLocation = "GPS Locked";
+        const canvas = document.getElementById('canvas');
+        const status = document.getElementById('status');
+        let currentGPS = "Acquiring GPS...";
 
-        // 1. Initialize Camera (Mobile Optimized)
-        async function startApp() {
+        // 2. Start Camera & GPS immediately
+        async function initSystem() {
             try {
+                // Request Camera
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "environment" }, 
                     audio: false 
                 });
                 video.srcObject = stream;
-            } catch (err) {
-                alert("Camera Error: Please use HTTPS and allow camera access.");
-                statusText.innerText = "Error: Camera Access Denied";
-            }
+                video.onloadedmetadata = () => video.play();
 
-            // Start Geolocation
-            if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(p => {
-                    userLocation = `${p.coords.latitude.toFixed(4)}, ${p.coords.longitude.toFixed(4)}`;
-                    statusText.innerText = `Verified: ${userLocation}`;
-                });
+                // Request GPS
+                navigator.geolocation.watchPosition(
+                    (pos) => { currentGPS = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`; },
+                    () => { currentGPS = "GPS Denied"; },
+                    { enableHighAccuracy: true }
+                );
+            } catch (err) {
+                status.innerText = "Error: Please check Camera/GPS permissions.";
             }
         }
 
-        // 2. Capture and Timestamp
-        document.getElementById('snap-btn').addEventListener('click', async () => {
+        // 3. The Capture & Watermark Logic
+        document.getElementById('capture-btn').addEventListener('click', async () => {
             const branch = document.getElementById('branchSelect').value;
-            if (branch.includes("Select")) return alert("Please select your branch first!");
+            if (branch === "BK-ADMIN") return alert("Please select a branch first!");
 
-            statusText.innerText = "Processing Timemark...";
+            status.innerText = "Processing Timemark...";
             const ctx = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
+            // Draw original photo
             ctx.drawImage(video, 0, 0);
 
-            // DRAW OVERLAY
-            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            // Create Watermark Bar
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
             ctx.fillRect(0, canvas.height - 130, canvas.width, 130);
             
-            ctx.fillStyle = "#FF6600"; // Orange
-            ctx.font = "bold 30px Arial";
+            ctx.fillStyle = "#FF8C00"; // Signature Timemark Orange
             const now = new Date();
             
-            ctx.fillText(now.toLocaleString(), 30, canvas.height - 85);
-            ctx.fillText(`BRANCH: ${branch}`, 30, canvas.height - 45);
-            ctx.font = "20px Arial";
-            ctx.fillText(`GPS VERIFIED: ${userLocation}`, 30, canvas.height - 15);
+            ctx.font = "bold 34px Arial";
+            ctx.fillText(now.toLocaleString(), 30, canvas.height - 85); // Line 1: Time
+            
+            ctx.font = "30px Arial";
+            ctx.fillText(`BRANCH: ${branch}`, 30, canvas.height - 45); // Line 2: Store
+            
+            ctx.font = "italic 24px Arial";
+            ctx.fillText(`VERIFIED AT: ${currentGPS}`, 30, canvas.height - 15); // Line 3: GPS
 
-            // PREPARE UPLOAD (Quarterly Folder Strategy)
+            // 4. Quarterly Organized Upload
             const quarter = "Q" + Math.floor((now.getMonth() + 3) / 3);
             const year = now.getFullYear();
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // 60% quality for storage efficiency
-            const path = `${year}/${quarter}/${branch.replace(/\s+/g, '-')}/${Date.now()}.jpg`;
+            const fileName = `Records/${year}/${quarter}/${branch}/${Date.now()}.jpg`;
+            const storageRef = ref(storage, fileName);
 
-            statusText.innerText = "Syncing with Database...";
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // 60% compression for 30-store storage speed
+
+            status.innerText = "Uploading to Cloud...";
             try {
-                const storageRef = ref(storage, path);
                 const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
-                const downloadUrl = await getDownloadURL(snapshot.ref);
-
-                // Add entry to Realtime Database
-                await push(dbRef(db, 'teamPhotos'), {
-                    url: downloadUrl,
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                
+                // Save to Database for your Admin Dashboard
+                await push(dbRef(database, 'liveFeed'), {
+                    url: downloadURL,
                     branch: branch,
                     timestamp: now.toISOString(),
-                    location: userLocation
+                    gps: currentGPS
                 });
 
-                statusText.innerText = "Upload Successful!";
-                setTimeout(() => { statusText.innerText = `Verified: ${userLocation}`; }, 3000);
+                status.innerText = "✅ Verified & Synced!";
+                setTimeout(() => { status.innerText = "System Ready"; }, 3000);
             } catch (error) {
-                statusText.innerText = "Upload Failed! Check Internet.";
-                console.error(error);
+                status.innerText = "Upload Failed. Check Internet.";
             }
         });
 
-        startApp();
+        initSystem();
     </script>
 </body>
 </html>
