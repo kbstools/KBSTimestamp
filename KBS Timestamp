@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bakeshop Verified Cam</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #viewfinder { width: 100%; flex-grow: 1; background: #000; object-fit: cover; }
+        .ui-panel { background: #2d2d2d; padding: 15px; border-top: 2px solid #ff6600; text-align: center; }
+        select { width: 90%; padding: 12px; margin-bottom: 10px; border-radius: 5px; font-size: 16px; background: #444; color: white; border: 1px solid #666; }
+        #snap-btn { background: #ff6600; color: white; border: none; padding: 15px 40px; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(255,102,0,0.4); }
+        #snap-btn:active { transform: scale(0.95); background: #e65c00; }
+        #status { font-size: 12px; margin-top: 10px; color: #aaa; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+    <video id="viewfinder" autoplay playsinline muted></video>
+
+    <canvas id="outputCanvas"></canvas>
+
+    <div class="ui-panel">
+        <select id="branchSelect">
+            <option disabled selected>-- Select Your Branch --</option>
+            <option>BK-01 Manila</option>
+            <option>BK-02 Quezon City</option>
+            </select>
+        <br>
+        <button id="snap-btn">CAPTURE & SYNC</button>
+        <div id="status">Ready (GPS: Locating...)</div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+        import { getDatabase, ref as dbRef, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // === REPLACE WITH YOUR PROJECT CONFIG ===
+        const firebaseConfig = {
+            apiKey: "PASTE_HERE",
+            authDomain: "PASTE_HERE",
+            databaseURL: "PASTE_HERE",
+            projectId: "PASTE_HERE",
+            storageBucket: "PASTE_HERE",
+            messagingSenderId: "PASTE_HERE",
+            appId: "PASTE_HERE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+        const db = getDatabase(app);
+
+        const video = document.getElementById('viewfinder');
+        const canvas = document.getElementById('outputCanvas');
+        const statusText = document.getElementById('status');
+        let userLocation = "GPS Locked";
+
+        // 1. Initialize Camera (Mobile Optimized)
+        async function startApp() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Camera Error: Please use HTTPS and allow camera access.");
+                statusText.innerText = "Error: Camera Access Denied";
+            }
+
+            // Start Geolocation
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(p => {
+                    userLocation = `${p.coords.latitude.toFixed(4)}, ${p.coords.longitude.toFixed(4)}`;
+                    statusText.innerText = `Verified: ${userLocation}`;
+                });
+            }
+        }
+
+        // 2. Capture and Timestamp
+        document.getElementById('snap-btn').addEventListener('click', async () => {
+            const branch = document.getElementById('branchSelect').value;
+            if (branch.includes("Select")) return alert("Please select your branch first!");
+
+            statusText.innerText = "Processing Timemark...";
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            ctx.drawImage(video, 0, 0);
+
+            // DRAW OVERLAY
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.fillRect(0, canvas.height - 130, canvas.width, 130);
+            
+            ctx.fillStyle = "#FF6600"; // Orange
+            ctx.font = "bold 30px Arial";
+            const now = new Date();
+            
+            ctx.fillText(now.toLocaleString(), 30, canvas.height - 85);
+            ctx.fillText(`BRANCH: ${branch}`, 30, canvas.height - 45);
+            ctx.font = "20px Arial";
+            ctx.fillText(`GPS VERIFIED: ${userLocation}`, 30, canvas.height - 15);
+
+            // PREPARE UPLOAD (Quarterly Folder Strategy)
+            const quarter = "Q" + Math.floor((now.getMonth() + 3) / 3);
+            const year = now.getFullYear();
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // 60% quality for storage efficiency
+            const path = `${year}/${quarter}/${branch.replace(/\s+/g, '-')}/${Date.now()}.jpg`;
+
+            statusText.innerText = "Syncing with Database...";
+            try {
+                const storageRef = ref(storage, path);
+                const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
+                const downloadUrl = await getDownloadURL(snapshot.ref);
+
+                // Add entry to Realtime Database
+                await push(dbRef(db, 'teamPhotos'), {
+                    url: downloadUrl,
+                    branch: branch,
+                    timestamp: now.toISOString(),
+                    location: userLocation
+                });
+
+                statusText.innerText = "Upload Successful!";
+                setTimeout(() => { statusText.innerText = `Verified: ${userLocation}`; }, 3000);
+            } catch (error) {
+                statusText.innerText = "Upload Failed! Check Internet.";
+                console.error(error);
+            }
+        });
+
+        startApp();
+    </script>
+</body>
+</html>
