@@ -37,16 +37,15 @@
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
         import { getDatabase, ref as dbRef, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // --- PASTE YOUR FIREBASE CONFIG FROM GOOGLE CONSOLE HERE ---
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID",
-            databaseURL: "YOUR_DATABASE_URL"
-        };
+       const firebaseConfig = {
+      apiKey: "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
+      authDomain: "kingsbakeshopdatabase.firebaseapp.com",
+      projectId: "kingsbakeshopdatabase",
+      storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
+      messagingSenderId: "256940044664",
+      appId: "1:256940044664:web:abb651add27a4445ed188d",
+      measurementId: "G-YDS7TH7N44"
+    };
 
         const app = initializeApp(firebaseConfig);
         const storage = getStorage(app);
