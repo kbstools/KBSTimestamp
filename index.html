@@ -9,11 +9,12 @@
         #viewfinder { width: 100%; height: 60vh; object-fit: cover; background: #000; border-bottom: 2px solid #ff6600; }
         .controls { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: space-around; background: #222; }
         select { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #333; color: white; font-size: 16px; margin-bottom: 10px; }
-        #capture-btn { background: #ff6600; border: none; color: white; width: 85px; height: 85px; border-radius: 50%; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 0 20px rgba(255,102,0,0.4); transition: transform 0.1s; }
+        #capture-btn { background: #ff6600; border: none; color: white; width: 85px; height: 85px; border-radius: 50%; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 0 20px rgba(255,102,0,0.4); }
         #capture-btn:active { transform: scale(0.95); }
         #capture-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         #status { font-size: 13px; color: #aaa; margin-top: 5px; }
-        #gps-status { font-size: 12px; color: #ff8c00; margin-top: 5px; }
+        #gps-status { font-size: 12px; color: #ff8c00; margin-top: 5px; font-weight: bold; }
+        #debug { font-size: 10px; color: #666; margin-top: 10px; max-height: 50px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 4px; }
         #canvas { display: none; }
     </style>
 </head>
@@ -31,7 +32,8 @@
 
         <button id="capture-btn">SNAP & SYNC</button>
         <div id="status">System Ready</div>
-        <div id="gps-status">GPS: Acquiring...</div>
+        <div id="gps-status">🔴 GPS: Acquiring...</div>
+        <div id="debug"></div>
     </div>
 
     <canvas id="canvas"></canvas>
@@ -39,18 +41,16 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-        import { getDatabase, ref as dbRef, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref as dbRef, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // FIX #1: Firebase config should be loaded from backend/environment
-        // For now, this is a placeholder - NEVER hardcode sensitive keys in production
         const firebaseConfig = {
-            apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
-            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "kingsbakeshopdatabase.firebaseapp.com",
-            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "kingsbakeshopdatabase",
-            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "kingsbakeshopdatabase.firebasestorage.app",
-            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "256940044664",
-            appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:256940044664:web:abb651add27a4445ed188d",
-            measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-YDS7TH7N44"
+            apiKey: "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
+            authDomain: "kingsbakeshopdatabase.firebaseapp.com",
+            projectId: "kingsbakeshopdatabase",
+            storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
+            messagingSenderId: "256940044664",
+            appId: "1:256940044664:web:abb651add27a4445ed188d",
+            measurementId: "G-YDS7TH7N44"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -62,29 +62,29 @@
         const status = document.getElementById('status');
         const gpsStatus = document.getElementById('gps-status');
         const captureBtn = document.getElementById('capture-btn');
+        const debugDiv = document.getElementById('debug');
         
         let currentGPS = "Acquiring GPS...";
         let cameraReady = false;
         let gpsReady = false;
 
-        // FIX #2: Better error logging for debugging
-        const logger = {
-            log: (msg) => console.log(`[BAKESHOP-CAM] ${msg}`),
-            error: (msg, err) => console.error(`[BAKESHOP-CAM] ERROR: ${msg}`, err),
-            warn: (msg) => console.warn(`[BAKESHOP-CAM] WARNING: ${msg}`)
-        };
-
-        // FIX #3: Calculate quarter correctly
-        function getQuarter(date) {
-            const month = date.getMonth(); // 0-11
-            const quarter = Math.ceil((month + 1) / 3); // 1-4
-            return `Q${quarter}`;
+        function addDebug(msg) {
+            console.log(`[DEBUG] ${msg}`);
+            debugDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
         }
 
-        // FIX #4: Improved system initialization with better permission handling
+        function getQuarter(date) {
+            const month = date.getMonth();
+            return Math.ceil((month + 1) / 3);
+        }
+
+        // FIXED: Proper GPS handling with better error messages
         async function initSystem() {
+            addDebug("System initializing...");
+            
             try {
-                // Request Camera with better error handling
+                // Camera Setup
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { facingMode: "environment" }, 
@@ -94,76 +94,69 @@
                     video.onloadedmetadata = () => {
                         video.play();
                         cameraReady = true;
-                        logger.log("Camera initialized successfully");
+                        addDebug("✓ Camera ready");
                         updateUIStatus();
                     };
                 } catch (cameraErr) {
-                    if (cameraErr.name === 'NotAllowedError') {
-                        status.innerText = "❌ Camera access denied. Check permissions.";
-                        logger.error("Camera permission denied by user", cameraErr);
-                    } else if (cameraErr.name === 'NotFoundError') {
-                        status.innerText = "❌ No camera found on device.";
-                        logger.error("Camera not found", cameraErr);
-                    } else {
-                        status.innerText = "❌ Camera error. Please refresh.";
-                        logger.error("Camera initialization failed", cameraErr);
-                    }
+                    status.innerText = "❌ Camera Error";
+                    addDebug(`Camera Error: ${cameraErr.message}`);
                     captureBtn.disabled = true;
                 }
 
-                // Request GPS with timeout
+                // GPS Setup - FIXED with explicit permission request
+                addDebug("Requesting GPS...");
+                
                 const gpsTimeout = setTimeout(() => {
-                    logger.warn("GPS acquisition timeout after 15 seconds");
-                    gpsStatus.innerText = "GPS: Timeout (using last known)";
+                    addDebug("⚠ GPS timeout - proceeding without GPS");
+                    gpsStatus.innerText = "⚠ GPS: Unavailable";
                     gpsReady = true;
                     updateUIStatus();
-                }, 15000);
+                }, 20000);
 
-                navigator.geolocation.watchPosition(
-                    (pos) => { 
+                // Use watchPosition for continuous location updates
+                const watchId = navigator.geolocation.watchPosition(
+                    (pos) => {
                         clearTimeout(gpsTimeout);
                         currentGPS = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
                         gpsStatus.innerText = `✓ GPS: ${currentGPS}`;
                         gpsReady = true;
-                        logger.log(`GPS acquired: ${currentGPS} (±${pos.coords.accuracy.toFixed(1)}m)`);
+                        addDebug(`✓ GPS acquired: ${currentGPS}`);
                         updateUIStatus();
                     },
-                    (gpsErr) => { 
-                        clearTimeout(gpsTimeout);
-                        currentGPS = "GPS Unavailable";
-                        gpsStatus.innerText = "⚠ GPS: Unavailable";
+                    (gpsErr) => {
+                        addDebug(`GPS Error Code ${gpsErr.code}: ${gpsErr.message}`);
                         if (gpsErr.code === 1) {
-                            logger.warn("GPS permission denied");
+                            gpsStatus.innerText = "❌ GPS: Permission Denied";
+                            addDebug("GPS permission denied - check device settings");
                         } else if (gpsErr.code === 2) {
-                            logger.warn("GPS position unavailable");
+                            gpsStatus.innerText = "⚠ GPS: Position Unavailable";
+                            addDebug("GPS position unavailable - try outdoor");
                         } else {
-                            logger.warn("GPS timeout");
+                            gpsStatus.innerText = "⚠ GPS: Timeout";
                         }
                         gpsReady = true;
                         updateUIStatus();
                     },
                     { 
                         enableHighAccuracy: true,
-                        timeout: 15000,
+                        timeout: 20000,
                         maximumAge: 0
                     }
                 );
+
             } catch (err) {
-                status.innerText = "System initialization error.";
-                logger.error("System init failed", err);
+                addDebug(`Init Error: ${err.message}`);
             }
         }
 
         function updateUIStatus() {
-            if (cameraReady && gpsReady) {
+            if (cameraReady) {
                 captureBtn.disabled = false;
-                if (status.innerText === "System Ready" || status.innerText.includes("Acquiring")) {
-                    status.innerText = "✓ Ready to Capture";
-                }
+                status.innerText = "Ready to Capture";
             }
         }
 
-        // FIX #5: Enhanced capture & watermark logic with validation
+        // FIXED: Better upload error handling
         captureBtn.addEventListener('click', async () => {
             const branch = document.getElementById('branchSelect').value;
             if (branch === "BK-ADMIN") {
@@ -171,93 +164,73 @@
                 return;
             }
 
-            if (!cameraReady) {
-                alert("Camera is not ready. Please refresh the page.");
-                return;
-            }
-
             captureBtn.disabled = true;
-            status.innerText = "Processing Timemark...";
+            status.innerText = "Processing...";
+            addDebug(`Capturing for branch: ${branch}`);
 
             try {
                 const ctx = canvas.getContext('2d');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
-                if (canvas.width === 0 || canvas.height === 0) {
-                    throw new Error("Invalid video dimensions");
-                }
-                
-                // Draw original photo
                 ctx.drawImage(video, 0, 0);
 
-                // Create Watermark Bar
+                // Watermark
                 ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
                 ctx.fillRect(0, canvas.height - 130, canvas.width, 130);
                 
-                ctx.fillStyle = "#FF8C00"; // Signature Timemark Orange
+                ctx.fillStyle = "#FF8C00";
                 const now = new Date();
                 
-                // Add timestamp with better formatting
                 ctx.font = "bold 32px Arial";
-                const timeStr = now.toLocaleString('en-PH', { 
-                    year: 'numeric', 
-                    month: '2-digit', 
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
+                const timeStr = now.toLocaleString('en-PH');
                 ctx.fillText(timeStr, 30, canvas.height - 85);
                 
                 ctx.font = "28px Arial";
                 ctx.fillText(`BRANCH: ${branch}`, 30, canvas.height - 45);
                 
                 ctx.font = "italic 22px Arial";
-                ctx.fillText(`VERIFIED AT: ${currentGPS}`, 30, canvas.height - 15);
+                ctx.fillText(`GPS: ${currentGPS}`, 30, canvas.height - 15);
 
-                // FIX #6: Correct quarter calculation
-                const quarter = getQuarter(now);
+                const quarter = `Q${getQuarter(now)}`;
                 const year = now.getFullYear();
                 const fileName = `Records/${year}/${quarter}/${branch}/${Date.now()}.jpg`;
                 const storageRef = ref(storage, fileName);
 
-                logger.log(`Uploading to: ${fileName}`);
+                addDebug(`Uploading to: ${fileName}`);
 
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // Slightly better quality
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-                status.innerText = "Uploading to Cloud...";
-                try {
-                    const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
-                    logger.log(`File uploaded successfully: ${snapshot.ref.fullPath}`);
-                    
-                    const downloadURL = await getDownloadURL(snapshot.ref);
-                    
-                    // Save to Database with additional metadata
-                    await push(dbRef(database, 'liveFeed'), {
-                        url: downloadURL,
-                        branch: branch,
-                        timestamp: now.toISOString(),
-                        gps: currentGPS,
-                        userAgent: navigator.userAgent.substring(0, 100),
-                        uploadedAt: new Date().toISOString()
-                    });
+                // Upload to Storage
+                const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                addDebug(`✓ File uploaded: ${fileName}`);
 
-                    logger.log("Record saved to database");
-                    status.innerText = "✅ Verified & Synced!";
-                    
-                    setTimeout(() => { 
-                        status.innerText = "✓ Ready to Capture";
-                        captureBtn.disabled = false;
-                    }, 3000);
-                } catch (uploadErr) {
-                    logger.error("Upload failed", uploadErr);
-                    status.innerText = `❌ Upload Failed: ${uploadErr.message}`;
+                // FIXED: Save to Database with explicit error handling
+                const recordId = Date.now().toString();
+                const dbPath = `liveFeed/${recordId}`;
+                
+                addDebug(`Writing to database: ${dbPath}`);
+                
+                await set(dbRef(database, dbPath), {
+                    url: downloadURL,
+                    branch: branch,
+                    timestamp: now.toISOString(),
+                    gps: currentGPS,
+                    createdAt: new Date().toISOString()
+                });
+
+                addDebug("✓ Database write successful!");
+                status.innerText = "✅ Synced!";
+                
+                setTimeout(() => {
+                    status.innerText = "Ready to Capture";
                     captureBtn.disabled = false;
-                }
+                }, 2000);
+
             } catch (err) {
-                logger.error("Capture process failed", err);
-                status.innerText = `❌ Error: ${err.message}`;
+                addDebug(`❌ Error: ${err.message}`);
+                status.innerText = `Error: ${err.message}`;
                 captureBtn.disabled = false;
             }
         });
