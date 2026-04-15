@@ -96,13 +96,26 @@
             width: 90%;
             max-width: 300px;
         }
-        
+
+        .firebase-status {
+            font-size: 10px;
+            color: #4CAF50;
+            text-align: center;
+            flex-shrink: 0;
+            width: 90%;
+            max-width: 300px;
+        }
+
+        .firebase-status.error {
+            color: #ff4444;
+        }
+
         #debug { 
             font-size: 9px; 
             color: #888;
             width: 95%;
             max-width: 400px;
-            height: 120px;
+            height: 150px;
             border: 1px solid #444; 
             background: #1a1a1a;
             padding: 8px;
@@ -118,12 +131,23 @@
             padding: 2px 0;
             border-bottom: 1px solid #333;
         }
+
+        #debug .error {
+            color: #ff6666;
+        }
+
+        #debug .success {
+            color: #66ff66;
+        }
+
+        #debug .info {
+            color: #66ccff;
+        }
         
         #canvas { 
             display: none; 
         }
 
-        /* Mobile optimizations */
         @media (max-height: 600px) {
             #viewfinder {
                 height: auto;
@@ -136,7 +160,7 @@
             }
             
             #debug {
-                height: 80px;
+                height: 100px;
                 font-size: 8px;
             }
             
@@ -163,6 +187,7 @@
         <button id="capture-btn">SNAP & SYNC</button>
         <div id="status">System Ready</div>
         <div id="gps-status">🔴 GPS: Acquiring...</div>
+        <div class="firebase-status" id="firebase-status">⏳ Firebase: Initializing...</div>
         <div id="debug"></div>
     </div>
 
@@ -171,7 +196,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-        import { getDatabase, ref as dbRef, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref as dbRef, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
@@ -183,38 +208,38 @@
             measurementId: "G-YDS7TH7N44"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const storage = getStorage(app);
-        const database = getDatabase(app);
-
         const video = document.getElementById('viewfinder');
         const canvas = document.getElementById('canvas');
         const status = document.getElementById('status');
         const gpsStatus = document.getElementById('gps-status');
         const captureBtn = document.getElementById('capture-btn');
         const debugDiv = document.getElementById('debug');
+        const firebaseStatusDiv = document.getElementById('firebase-status');
         
         let currentGPS = "Acquiring GPS...";
         let cameraReady = false;
         let gpsReady = false;
+        let firebaseReady = false;
         let logCount = 0;
 
-        function addDebug(msg) {
+        // Initialize Firebase
+        let app, storage, database;
+
+        function addDebug(msg, type = 'info') {
             console.log(`[DEBUG] ${msg}`);
             const time = new Date().toLocaleTimeString();
             const logEntry = document.createElement('div');
+            logEntry.className = type;
             logEntry.textContent = `${time}: ${msg}`;
             debugDiv.appendChild(logEntry);
             
-            // Keep only last 15 logs to prevent memory issues
             logCount++;
-            if (logCount > 15) {
+            if (logCount > 20) {
                 const firstChild = debugDiv.firstChild;
                 if (firstChild) firstChild.remove();
                 logCount--;
             }
             
-            // Auto-scroll to bottom
             debugDiv.scrollTop = debugDiv.scrollHeight;
         }
 
@@ -223,8 +248,28 @@
             return Math.ceil((month + 1) / 3);
         }
 
+        // Initialize Firebase with error handling
+        async function initFirebase() {
+            try {
+                addDebug('Initializing Firebase...', 'info');
+                app = initializeApp(firebaseConfig);
+                storage = getStorage(app);
+                database = getDatabase(app);
+                
+                addDebug('✓ Firebase SDK loaded', 'success');
+                firebaseStatusDiv.textContent = '✓ Firebase: Connected';
+                firebaseStatusDiv.classList.remove('error');
+                firebaseReady = true;
+                
+            } catch (err) {
+                addDebug(`Firebase Init Error: ${err.message}`, 'error');
+                firebaseStatusDiv.textContent = `✗ Firebase Error: ${err.message}`;
+                firebaseStatusDiv.classList.add('error');
+            }
+        }
+
         async function initSystem() {
-            addDebug("System initializing...");
+            addDebug("System initializing...", 'info');
             
             try {
                 // Camera Setup
@@ -237,20 +282,20 @@
                     video.onloadedmetadata = () => {
                         video.play();
                         cameraReady = true;
-                        addDebug("✓ Camera ready");
+                        addDebug("✓ Camera ready", 'success');
                         updateUIStatus();
                     };
                 } catch (cameraErr) {
                     status.innerText = "❌ Camera Error";
-                    addDebug(`Camera Error: ${cameraErr.message}`);
+                    addDebug(`Camera Error: ${cameraErr.message}`, 'error');
                     captureBtn.disabled = true;
                 }
 
                 // GPS Setup
-                addDebug("Requesting GPS...");
+                addDebug("Requesting GPS...", 'info');
                 
                 const gpsTimeout = setTimeout(() => {
-                    addDebug("⚠ GPS timeout - proceeding");
+                    addDebug("⚠ GPS timeout", 'error');
                     gpsStatus.innerText = "⚠ GPS: Unavailable";
                     gpsReady = true;
                     updateUIStatus();
@@ -262,20 +307,12 @@
                         currentGPS = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
                         gpsStatus.innerText = `✓ GPS: ${currentGPS}`;
                         gpsReady = true;
-                        addDebug(`✓ GPS acquired: ${currentGPS}`);
+                        addDebug(`✓ GPS: ${currentGPS}`, 'success');
                         updateUIStatus();
                     },
                     (gpsErr) => {
-                        addDebug(`GPS Error Code ${gpsErr.code}: ${gpsErr.message}`);
-                        if (gpsErr.code === 1) {
-                            gpsStatus.innerText = "❌ GPS: Permission Denied";
-                            addDebug("Enable GPS in settings");
-                        } else if (gpsErr.code === 2) {
-                            gpsStatus.innerText = "⚠ GPS: Position Unavailable";
-                            addDebug("Try outdoor location");
-                        } else {
-                            gpsStatus.innerText = "⚠ GPS: Timeout";
-                        }
+                        addDebug(`GPS Error ${gpsErr.code}: ${gpsErr.message}`, 'error');
+                        gpsStatus.innerText = "⚠ GPS: Unavailable";
                         gpsReady = true;
                         updateUIStatus();
                     },
@@ -287,12 +324,12 @@
                 );
 
             } catch (err) {
-                addDebug(`Init Error: ${err.message}`);
+                addDebug(`Init Error: ${err.message}`, 'error');
             }
         }
 
         function updateUIStatus() {
-            if (cameraReady) {
+            if (cameraReady && firebaseReady) {
                 captureBtn.disabled = false;
                 status.innerText = "Ready to Capture";
             }
@@ -305,15 +342,22 @@
                 return;
             }
 
+            if (!firebaseReady) {
+                addDebug('Firebase not ready!', 'error');
+                alert("Firebase connection error. Refresh page.");
+                return;
+            }
+
             captureBtn.disabled = true;
             status.innerText = "Processing...";
-            addDebug(`Capturing for: ${branch}`);
+            addDebug(`Starting capture for: ${branch}`, 'info');
 
             try {
                 const ctx = canvas.getContext('2d');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
+                addDebug(`Canvas: ${canvas.width}x${canvas.height}`, 'info');
                 ctx.drawImage(video, 0, 0);
 
                 // Watermark
@@ -336,47 +380,66 @@
                 const quarter = `Q${getQuarter(now)}`;
                 const year = now.getFullYear();
                 const fileName = `Records/${year}/${quarter}/${branch}/${Date.now()}.jpg`;
-                const storageRef = ref(storage, fileName);
 
-                addDebug(`Uploading: ${fileName}`);
+                addDebug(`File path: ${fileName}`, 'info');
+                status.innerText = "Uploading photo...";
 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                addDebug(`Image size: ${(dataUrl.length / 1024).toFixed(1)}KB`, 'info');
 
                 // Upload to Storage
-                const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
-                const downloadURL = await getDownloadURL(snapshot.ref);
-                addDebug(`✓ Photo uploaded`);
+                try {
+                    addDebug("Uploading to Storage...", 'info');
+                    const storageRef = ref(storage, fileName);
+                    const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
+                    addDebug(`✓ Storage upload complete`, 'success');
 
-                // Save to Database
-                const recordId = Date.now().toString();
-                const dbPath = `liveFeed/${recordId}`;
-                
-                addDebug(`Saving to DB...`);
-                
-                await set(dbRef(database, dbPath), {
-                    url: downloadURL,
-                    branch: branch,
-                    timestamp: now.toISOString(),
-                    gps: currentGPS,
-                    createdAt: new Date().toISOString()
-                });
+                    const downloadURL = await getDownloadURL(snapshot.ref);
+                    addDebug(`✓ Got download URL`, 'success');
 
-                addDebug("✓ Sync complete!");
-                status.innerText = "✅ Synced!";
-                
-                setTimeout(() => {
-                    status.innerText = "Ready to Capture";
+                    // Save to Database
+                    addDebug("Writing to Database...", 'info');
+                    const recordId = Date.now().toString();
+                    const dbPath = `liveFeed/${recordId}`;
+                    
+                    const dbData = {
+                        url: downloadURL,
+                        branch: branch,
+                        timestamp: now.toISOString(),
+                        gps: currentGPS,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    addDebug(`DB Path: ${dbPath}`, 'info');
+                    addDebug(`Data keys: ${Object.keys(dbData).join(', ')}`, 'info');
+
+                    await set(dbRef(database, dbPath), dbData);
+                    
+                    addDebug(`✓ Database write complete!`, 'success');
+                    status.innerText = "✅ Synced!";
+                    
+                    setTimeout(() => {
+                        status.innerText = "Ready to Capture";
+                        captureBtn.disabled = false;
+                    }, 2000);
+
+                } catch (uploadErr) {
+                    addDebug(`Storage/DB Error: ${uploadErr.message}`, 'error');
+                    addDebug(`Error code: ${uploadErr.code}`, 'error');
+                    status.innerText = `Error: ${uploadErr.message}`;
                     captureBtn.disabled = false;
-                }, 2000);
+                }
 
             } catch (err) {
-                addDebug(`ERROR: ${err.message}`);
+                addDebug(`Capture Error: ${err.message}`, 'error');
                 status.innerText = `Error: ${err.message}`;
                 captureBtn.disabled = false;
             }
         });
 
-        initSystem();
+        // Initialize in order
+        await initFirebase();
+        await initSystem();
     </script>
 </body>
 </html>
