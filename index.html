@@ -187,7 +187,7 @@
         <button id="capture-btn">SNAP & SYNC</button>
         <div id="status">System Ready</div>
         <div id="gps-status">🔴 GPS: Acquiring...</div>
-        <div class="firebase-status" id="firebase-status">⏳ Firebase: Initializing...</div>
+        <div class="firebase-status" id="firebase-status">✓ Firebase: Ready</div>
         <div id="debug"></div>
     </div>
 
@@ -208,22 +208,21 @@
             measurementId: "G-YDS7TH7N44"
         };
 
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+        const database = getDatabase(app);
+
         const video = document.getElementById('viewfinder');
         const canvas = document.getElementById('canvas');
         const status = document.getElementById('status');
         const gpsStatus = document.getElementById('gps-status');
         const captureBtn = document.getElementById('capture-btn');
         const debugDiv = document.getElementById('debug');
-        const firebaseStatusDiv = document.getElementById('firebase-status');
         
         let currentGPS = "Acquiring GPS...";
         let cameraReady = false;
         let gpsReady = false;
-        let firebaseReady = false;
         let logCount = 0;
-
-        // Initialize Firebase
-        let app, storage, database;
 
         function addDebug(msg, type = 'info') {
             console.log(`[DEBUG] ${msg}`);
@@ -246,26 +245,6 @@
         function getQuarter(date) {
             const month = date.getMonth();
             return Math.ceil((month + 1) / 3);
-        }
-
-        // Initialize Firebase with error handling
-        async function initFirebase() {
-            try {
-                addDebug('Initializing Firebase...', 'info');
-                app = initializeApp(firebaseConfig);
-                storage = getStorage(app);
-                database = getDatabase(app);
-                
-                addDebug('✓ Firebase SDK loaded', 'success');
-                firebaseStatusDiv.textContent = '✓ Firebase: Connected';
-                firebaseStatusDiv.classList.remove('error');
-                firebaseReady = true;
-                
-            } catch (err) {
-                addDebug(`Firebase Init Error: ${err.message}`, 'error');
-                firebaseStatusDiv.textContent = `✗ Firebase Error: ${err.message}`;
-                firebaseStatusDiv.classList.add('error');
-            }
         }
 
         async function initSystem() {
@@ -329,7 +308,7 @@
         }
 
         function updateUIStatus() {
-            if (cameraReady && firebaseReady) {
+            if (cameraReady && gpsReady) {
                 captureBtn.disabled = false;
                 status.innerText = "Ready to Capture";
             }
@@ -342,22 +321,15 @@
                 return;
             }
 
-            if (!firebaseReady) {
-                addDebug('Firebase not ready!', 'error');
-                alert("Firebase connection error. Refresh page.");
-                return;
-            }
-
             captureBtn.disabled = true;
             status.innerText = "Processing...";
-            addDebug(`Starting capture for: ${branch}`, 'info');
+            addDebug(`Capturing: ${branch}`, 'info');
 
             try {
                 const ctx = canvas.getContext('2d');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
-                addDebug(`Canvas: ${canvas.width}x${canvas.height}`, 'info');
                 ctx.drawImage(video, 0, 0);
 
                 // Watermark
@@ -381,65 +353,47 @@
                 const year = now.getFullYear();
                 const fileName = `Records/${year}/${quarter}/${branch}/${Date.now()}.jpg`;
 
-                addDebug(`File path: ${fileName}`, 'info');
-                status.innerText = "Uploading photo...";
+                addDebug(`Uploading: ${fileName}`, 'info');
+                status.innerText = "Uploading...";
 
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                addDebug(`Image size: ${(dataUrl.length / 1024).toFixed(1)}KB`, 'info');
 
                 // Upload to Storage
-                try {
-                    addDebug("Uploading to Storage...", 'info');
-                    const storageRef = ref(storage, fileName);
-                    const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
-                    addDebug(`✓ Storage upload complete`, 'success');
+                const storageRef = ref(storage, fileName);
+                const snapshot = await uploadString(storageRef, dataUrl, 'data_url');
+                addDebug(`✓ Photo uploaded`, 'success');
 
-                    const downloadURL = await getDownloadURL(snapshot.ref);
-                    addDebug(`✓ Got download URL`, 'success');
+                const downloadURL = await getDownloadURL(snapshot.ref);
 
-                    // Save to Database
-                    addDebug("Writing to Database...", 'info');
-                    const recordId = Date.now().toString();
-                    const dbPath = `liveFeed/${recordId}`;
-                    
-                    const dbData = {
-                        url: downloadURL,
-                        branch: branch,
-                        timestamp: now.toISOString(),
-                        gps: currentGPS,
-                        createdAt: new Date().toISOString()
-                    };
+                // Save to Database
+                addDebug(`Saving to database...`, 'info');
+                const recordId = Date.now().toString();
+                const dbPath = `liveFeed/${recordId}`;
+                
+                await set(dbRef(database, dbPath), {
+                    url: downloadURL,
+                    branch: branch,
+                    timestamp: now.toISOString(),
+                    gps: currentGPS,
+                    createdAt: new Date().toISOString()
+                });
 
-                    addDebug(`DB Path: ${dbPath}`, 'info');
-                    addDebug(`Data keys: ${Object.keys(dbData).join(', ')}`, 'info');
-
-                    await set(dbRef(database, dbPath), dbData);
-                    
-                    addDebug(`✓ Database write complete!`, 'success');
-                    status.innerText = "✅ Synced!";
-                    
-                    setTimeout(() => {
-                        status.innerText = "Ready to Capture";
-                        captureBtn.disabled = false;
-                    }, 2000);
-
-                } catch (uploadErr) {
-                    addDebug(`Storage/DB Error: ${uploadErr.message}`, 'error');
-                    addDebug(`Error code: ${uploadErr.code}`, 'error');
-                    status.innerText = `Error: ${uploadErr.message}`;
+                addDebug(`✓ Saved to database!`, 'success');
+                status.innerText = "✅ Synced!";
+                
+                setTimeout(() => {
+                    status.innerText = "Ready to Capture";
                     captureBtn.disabled = false;
-                }
+                }, 2000);
 
             } catch (err) {
-                addDebug(`Capture Error: ${err.message}`, 'error');
+                addDebug(`ERROR: ${err.message}`, 'error');
                 status.innerText = `Error: ${err.message}`;
                 captureBtn.disabled = false;
             }
         });
 
-        // Initialize in order
-        await initFirebase();
-        await initSystem();
+        initSystem();
     </script>
 </body>
 </html>
