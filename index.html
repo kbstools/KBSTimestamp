@@ -1,1 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timestamper Admin - Logs</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; }
+        
+        header {
+            background: linear-gradient(135deg, #4f46e5, #ff7e00);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        h1 { font-size: 1.5em; }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filters select, .filters input {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .filters select { min-width: 150px; cursor: pointer; }
+        .filters input[type="date"] { cursor: pointer; }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            padding: 15px 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            flex-wrap: wrap;
+        }
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-value { font-weight: bold; font-size: 1.2em; color: #4f46e5; }
+        .stat-label { color: #666; font-size: 0.9em; }
+        
+        .logs-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .log-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .log-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        
+        .log-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: #eee;
+            cursor: pointer;
+        }
+        
+        .log-details {
+            padding: 15px;
+        }
+        
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .employee-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #333;
+        }
+        
+        .mode-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .mode-first { background: #d4edda; color: #155724; }
+        .mode-breakout { background: #fff3cd; color: #856404; }
+        .mode-breakin { background: #cce5ff; color: #004085; }
+        .mode-final { background: #f8d7da; color: #721c24; }
+        .mode-other { background: #e2e3e5; color: #383d41; }
+        
+        .log-info {
+            display: grid;
+            gap: 6px;
+            font-size: 0.85em;
+            color: #555;
+        }
+        
+        .log-info-row {
+            display: flex;
+            gap: 8px;
+        }
+        .log-info-label {
+            color: #888;
+            min-width: 70px;
+        }
+        
+        .log-actions {
+            padding: 10px 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .btn-map { background: #4f46e5; color: white; }
+        .btn-map:hover { background: #4338ca; }
+        .btn-delete { background: #dc3545; color: white; }
+        .btn-delete:hover { background: #c82333; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal.active { display: flex; }
+        .modal-image {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .empty svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Timestamper Admin Logs</h1>
+        <div class="filters">
+            <select id="filterBranch">
+                <option value="">All Branches</option>
+            </select>
+            <select id="filterEmployee">
+                <option value="">All Employees</option>
+            </select>
+            <input type="date" id="filterDate" />
+            <button class="btn btn-map" onclick="applyFilters()">Filter</button>
+            <button class="btn" style="background: #6c757d; color: white;" onclick="clearFilters()">Clear</button>
+        </div>
+    </header>
+    
+    <div class="stats">
+        <div class="stat">
+            <span class="stat-value" id="totalLogs">0</span>
+            <span class="stat-label">Total Logs</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="totalEmployees">0</span>
+            <span class="stat-label">Employees</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="totalBranches">0</span>
+            <span class="stat-label">Branches</span>
+        </div>
+    </div>
+    
+    <div class="logs-container" id="logsContainer">
+        <div class="loading">Loading logs...</div>
+    </div>
+    
+    <div class="modal" id="imageModal" onclick="closeModal(event)">
+        <button class="modal-close">&times;</button>
+        <img class="modal-image" id="modalImage" src="" alt="Log photo" />
+    </div>
 
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-zWjPc1T8G0I3O1R6F9V2Y4B8C0E7A",
+            authDomain: "kingsbakeshopdatabase.firebaseapp.com",
+            databaseURL: "https://kingsbakeshopdatabase-default-rtdb.firebaseio.com",
+            storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
+            messagingSenderId: "123456789",
+            projectId: "kingsbakeshopdatabase"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const storage = firebase.storage();
+        
+        let allLogs = [];
+        let branches = new Set();
+        let employees = new Set();
+        
+        function init() {
+            loadLogs();
+        }
+        
+        function loadLogs() {
+            const container = document.getElementById('logsContainer');
+            container.innerHTML = '<div class="loading">Loading logs...</div>';
+            
+            database.ref('Logs').orderByChild('time').once('value', (snapshot) => {
+                allLogs = [];
+                branches.clear();
+                employees.clear();
+                
+                snapshot.forEach((child) => {
+                    const log = child.val();
+                    log.id = child.key;
+                    allLogs.push(log);
+                    if (log.branch) branches.add(log.branch);
+                    if (log.employee) employees.add(log.employee);
+                });
+                
+                allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
+                
+                populateFilters();
+                updateStats();
+                renderLogs(allLogs);
+            });
+        }
+        
+        function populateFilters() {
+            const branchSelect = document.getElementById('filterBranch');
+            const employeeSelect = document.getElementById('filterEmployee');
+            
+            branchSelect.innerHTML = '<option value="">All Branches</option>';
+            branches.forEach(branch => {
+                branchSelect.innerHTML += `<option value="${branch}">${branch}</option>`;
+            });
+            
+            employeeSelect.innerHTML = '<option value="">All Employees</option>';
+            employees.forEach(emp => {
+                employeeSelect.innerHTML += `<option value="${emp}">${emp}</option>`;
+            });
+        }
+        
+        function updateStats() {
+            document.getElementById('totalLogs').textContent = allLogs.length;
+            document.getElementById('totalEmployees').textContent = employees.size;
+            document.getElementById('totalBranches').textContent = branches.size;
+        }
+        
+        function applyFilters() {
+            const branch = document.getElementById('filterBranch').value;
+            const employee = document.getElementById('filterEmployee').value;
+            const date = document.getElementById('filterDate').value;
+            
+            let filtered = allLogs;
+            
+            if (branch) {
+                filtered = filtered.filter(log => log.branch === branch);
+            }
+            if (employee) {
+                filtered = filtered.filter(log => log.employee === employee);
+            }
+            if (date) {
+                const dateStr = date.replace(/-/g, '');
+                filtered = filtered.filter(log => {
+                    if (!log.time) return false;
+                    const logDate = new Date(log.time).toISOString().split('T')[0].replace(/-/g, '');
+                    return logDate === dateStr;
+                });
+            }
+            
+            renderLogs(filtered);
+        }
+        
+        function clearFilters() {
+            document.getElementById('filterBranch').value = '';
+            document.getElementById('filterEmployee').value = '';
+            document.getElementById('filterDate').value = '';
+            renderLogs(allLogs);
+        }
+        
+        function renderLogs(logs) {
+            const container = document.getElementById('logsContainer');
+            
+            if (logs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p>No logs found</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = logs.map(log => {
+                const time = log.time ? new Date(log.time) : new Date(log.id);
+                const timeStr = time.toLocaleString();
+                const modeClass = getModeBadgeClass(log.mode);
+                const modeDisplay = getModeDisplay(log.mode);
+                const imageUrl = log.imageUrl || '';
+                
+                return `
+                    <div class="log-card" data-id="${log.id}">
+                        <img class="log-image" src="${imageUrl}" alt="Clock ${log.mode}" onclick="openModal('${imageUrl}')" onerror="this.src='https://placehold.co/320x200?text=No+Image'" />
+                        <div class="log-details">
+                            <div class="log-header">
+                                <div class="employee-name">${log.employee || 'Unknown'}</div>
+                                <span class="mode-badge ${modeClass}">${modeDisplay}</span>
+                            </div>
+                            <div class="log-info">
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Branch:</span>
+                                    <span>${log.branch || '-'}</span>
+                                </div>
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Time:</span>
+                                    <span>${timeStr}</span>
+                                </div>
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Location:</span>
+                                    <span>${log.address || log.gpsCoords || '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="log-actions">
+                            <button class="btn btn-map" onclick="openMaps('${log.gpsCoords || ''}')">Map</button>
+                            <button class="btn btn-delete" onclick="deleteLog('${log.id}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function getModeBadgeClass(mode) {
+            if (mode === 'FIRST IN') return 'mode-first';
+            if (mode === 'BREAK OUT') return 'mode-breakout';
+            if (mode === 'BREAK IN') return 'mode-breakin';
+            if (mode === 'FINAL OUT') return 'mode-final';
+            return 'mode-other';
+        }
+        
+        function getModeDisplay(mode) {
+            const modeMap = {
+                'FIRST IN': 'First In',
+                'BREAK OUT': 'Break Out',
+                'BREAK IN': 'Break In',
+                'FINAL OUT': 'Final Out'
+            };
+            return modeMap[mode] || mode || '?';
+        }
+        
+        function openModal(url) {
+            if (!url) return;
+            document.getElementById('modalImage').src = url;
+            document.getElementById('imageModal').classList.add('active');
+        }
+        
+        function closeModal(e) {
+            if (e.target.classList.contains('modal') || e.target.classList.contains('modal-close')) {
+                document.getElementById('imageModal').classList.remove('active');
+            }
+        }
+        
+        function openMaps(coords) {
+            if (!coords) {
+                alert('No GPS coordinates available');
+                return;
+            }
+            const [lat, lng] = coords.split(',').map(s => s.trim());
+            if (lat && lng) {
+                window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+            } else {
+                alert('Invalid GPS coordinates');
+            }
+        }
+        
+        function deleteLog(id) {
+            if (!confirm('Are you sure you want to delete this log?')) return;
+            
+            database.ref('Logs/' + id).remove()
+                .then(() => {
+                    alert('Log deleted successfully');
+                    loadLogs();
+                })
+                .catch(err => {
+                    alert('Error deleting log: ' + err.message);
+                });
+        }
+        
+        init();
+    </script>
+</body>
+</html>
