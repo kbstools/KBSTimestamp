@@ -76,6 +76,8 @@
             position: relative;
             background: #000;
             overflow: hidden;
+            min-height: 300px;
+            max-height: 60vh;
         }
 
         #viewfinder { 
@@ -112,13 +114,16 @@
             background: rgba(0,0,0,0.8);
         }
 
-        /* Watermark - controls section */
+        /* Watermark - on camera preview (absolute) */
         .watermark {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            right: 15px;
+            z-index: 10;
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 15px;
-            z-index: 10;
         }
 
         .clock-badge {
@@ -150,17 +155,20 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
+            text-align: right;
         }
         
         .watermark-date {
             font-size: 14px;
             font-weight: 600;
-            color: #333;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7);
         }
         
         .watermark-address {
             font-size: 10px;
-            color: #666;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7);
             max-width: 200px;
             white-space: nowrap;
             overflow: hidden;
@@ -812,14 +820,8 @@
         <video id="viewfinder" autoplay playsinline muted></video>
 
         <button class="camera-switch" id="cameraSwitch" onclick="switchCamera()">&#128247;</button>
-    </div>
 
-    <!-- Separator Bar -->
-    <div class="separator-bar"></div>
-
-    <!-- Controls -->
-    <div class="controls-container">
-        <!-- Watermark in Controls - Mode + Time + Address -->
+        <!-- Watermark - on camera preview -->
         <div class="watermark">
             <div class="clock-badge">
                 <div class="badge-left" id="modeBadge">FIRST IN</div>
@@ -830,7 +832,13 @@
                 <div class="watermark-address" id="addressDisplay">---</div>
             </div>
         </div>
-        
+    </div>
+
+    <!-- Separator Bar -->
+    <div class="separator-bar"></div>
+
+    <!-- Controls -->
+    <div class="controls-container">
         <div class="input-group">
             <select id="branchSelect">
                 <option value="">-- Select Branch --</option>
