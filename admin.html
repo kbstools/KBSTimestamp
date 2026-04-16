@@ -25,6 +25,7 @@
             align-items: center;
             padding: 20px;
         }
+        .login-overlay.active { display: flex; }
         
         .login-box {
             background: white;
@@ -46,6 +47,7 @@
             border: 2px solid #ddd;
             border-radius: 8px;
             font-size: 16px;
+            box-sizing: border-box;
         }
         .login-box input:focus {
             outline: none;
@@ -61,6 +63,7 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
+            margin-bottom: 10px;
         }
         .login-box button:hover {
             background: #4338ca;
@@ -92,9 +95,6 @@
         .logout-btn:hover {
             background: rgba(255,255,255,0.3);
         }
-        
-        .main-content { display: none; }
-        .main-content.active { display: block; }
         
         header {
             background: linear-gradient(135deg, #4f46e5, #ff7e00);
@@ -267,12 +267,14 @@
             text-align: center;
             padding: 40px;
             color: #666;
+            grid-column: 1 / -1;
         }
         
         .empty {
             text-align: center;
             padding: 60px 20px;
             color: #999;
+            grid-column: 1 / -1;
         }
         .empty svg {
             width: 60px;
@@ -282,13 +284,15 @@
     </style>
 </head>
 <body>
-    <div class="login-overlay" id="loginOverlay">
+    <div class="login-overlay active" id="loginOverlay">
         <div class="login-box">
             <h2>Admin Login</h2>
             <div class="login-error" id="loginError">Invalid email or password</div>
-            <input type="email" id="loginEmail" placeholder="Email" />
-            <input type="password" id="loginPassword" placeholder="Password" onkeyup="if(event.key==='Enter')login()" />
-            <button onclick="login()">Sign In</button>
+            <form onsubmit="return false;">
+                <input type="email" id="loginEmail" placeholder="Email" required />
+                <input type="password" id="loginPassword" placeholder="Password" required />
+                <button type="submit" onclick="login()">Sign In</button>
+            </form>
         </div>
     </div>
     
@@ -300,56 +304,40 @@
         </div>
     </header>
     
-    <div class="main-content" id="mainContent" style="display:none;">
-    <div id="adminContent">
-        <div class="login-box">
-            <h2>Admin Login</h2>
-            <div class="login-error" id="loginError">Invalid email or password</div>
-            <input type="email" id="loginEmail" placeholder="Email" />
-            <input type="password" id="loginPassword" placeholder="Password" onkeyup="if(event.key==='Enter')login()" />
-            <button onclick="login()">Sign In</button>
+    <div id="adminContent" style="display:none;">
+        <div class="stats">
+            <div class="stat">
+                <span class="stat-value" id="totalLogs">0</span>
+                <span class="stat-label">Total Logs</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="totalEmployees">0</span>
+                <span class="stat-label">Employees</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="totalBranches">0</span>
+                <span class="stat-label">Branches</span>
+            </div>
         </div>
-    </div>
-    
-    <div class="main-content" id="mainContent">
+        
         <header>
             <h1>Timestamper Admin Logs</h1>
-            <div class="user-info">
-                <span id="userEmail"></span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
+            <div class="filters">
+                <select id="filterBranch">
+                    <option value="">All Branches</option>
+                </select>
+                <select id="filterEmployee">
+                    <option value="">All Employees</option>
+                </select>
+                <input type="date" id="filterDate" />
+                <button class="btn btn-map" onclick="applyFilters()">Filter</button>
+                <button class="btn" style="background: #6c757d; color: white;" onclick="clearFilters()">Clear</button>
             </div>
         </header>
-        <h1>Timestamper Admin Logs</h1>
-        <div class="filters">
-            <select id="filterBranch">
-                <option value="">All Branches</option>
-            </select>
-            <select id="filterEmployee">
-                <option value="">All Employees</option>
-            </select>
-            <input type="date" id="filterDate" />
-            <button class="btn btn-map" onclick="applyFilters()">Filter</button>
-            <button class="btn" style="background: #6c757d; color: white;" onclick="clearFilters()">Clear</button>
+        
+        <div class="logs-container" id="logsContainer">
+            <div class="loading">Loading logs...</div>
         </div>
-    </header>
-    
-    <div class="stats">
-        <div class="stat">
-            <span class="stat-value" id="totalLogs">0</span>
-            <span class="stat-label">Total Logs</span>
-        </div>
-        <div class="stat">
-            <span class="stat-value" id="totalEmployees">0</span>
-            <span class="stat-label">Employees</span>
-        </div>
-        <div class="stat">
-            <span class="stat-value" id="totalBranches">0</span>
-            <span class="stat-label">Branches</span>
-        </div>
-    </div>
-    
-    <div class="logs-container" id="logsContainer">
-        <div class="loading">Loading logs...</div>
     </div>
     
     <div class="modal" id="imageModal" onclick="closeModal(event)">
@@ -368,13 +356,13 @@
         };
         
         const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
+        const auth = firebase.auth(app);
         const database = firebase.database(app);
         const storage = firebase.storage(app);
         
-        console.log('Firebase initialized');
-        
         let allLogs = [];
+        let branches = new Set();
+        let employees = new Set();
         
         function login() {
             const email = document.getElementById('loginEmail').value.trim();
@@ -411,72 +399,42 @@
                 document.getElementById('adminHeader').style.display = 'flex';
                 document.getElementById('adminContent').style.display = 'block';
                 document.getElementById('userEmail').textContent = user.email;
-                init();
+                loadLogs();
             } else {
                 document.getElementById('loginOverlay').style.display = 'flex';
                 document.getElementById('adminHeader').style.display = 'none';
                 document.getElementById('adminContent').style.display = 'none';
             }
         });
-        let branches = new Set();
-        let employees = new Set();
         
-        function init() {
-            console.log('init called');
-            loadLogs();
-        }
-        
-function loadLogs() {
+        function loadLogs() {
             const container = document.getElementById('logsContainer');
-            container.innerHTML = '<div class="loading" id="loadingMsg">Loading logs...</div>';
+            container.innerHTML = '<div class="loading">Loading logs...</div>';
             
-            setTimeout(() => {
-                document.getElementById('loadingMsg').textContent = 'Still loading...';
-            }, 3000);
-            
-            database.ref('Logs').once('value')
-                .then((snapshot) => {
-                    console.log('Got snapshot, exists:', snapshot.exists());
-                    const data = snapshot.val();
-                    console.log('Data:', data);
-                    container.innerHTML = '<div id="result">Snapshot loaded. Check console for data.</div>';
-                    
-                    if (!snapshot.exists()) {
-                        container.innerHTML += '<p>No logs in database</p>';
-                        return;
-                    }
-                    
-                    // Show first log key to verify
-                    const firstKey = Object.keys(data)[0];
-                    container.innerHTML += '<p>First log ID: ' + firstKey + '</p><pre>' + JSON.stringify(data[firstKey], null, 2) + '</pre>';
-                })
-                .catch((err) => {
-                    console.error('Error:', err);
-                    container.innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
-                });
-        }
-                    
-                    snapshot.forEach((child) => {
-                        const log = child.val();
-                        log.id = child.key;
+            database.ref('Logs').once('value', (snapshot) => {
+                allLogs = [];
+                branches.clear();
+                employees.clear();
+                
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        const log = data[key];
+                        log.id = key;
                         allLogs.push(log);
                         if (log.branch) branches.add(log.branch);
                         if (log.employee) employees.add(log.employee);
                     });
-                    
-                    allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
-                    console.log('Sorting done, logs:', allLogs.length);
-                    
-                    populateFilters();
-                    updateStats();
-                    
-                    container.innerHTML = '<h3>Found ' + allLogs.length + ' logs</h3><pre>' + JSON.stringify(allLogs, null, 2) + '</pre>';
-                })
-                })
-                .catch((err) => {
-                    console.error('Load error:', err);
-                    container.innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
-                });
+                }
+                
+                allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
+                
+                populateFilters();
+                updateStats();
+                renderLogs(allLogs);
+            }, (error) => {
+                container.innerHTML = '<div class="empty">Error: ' + error.message + '</div>';
+            });
         }
         
         function populateFilters() {
@@ -533,7 +491,6 @@ function loadLogs() {
         }
         
         function renderLogs(logs) {
-            console.log('renderLogs called with', logs.length, 'logs');
             const container = document.getElementById('logsContainer');
             
             if (logs.length === 0) {
@@ -622,27 +579,18 @@ function loadLogs() {
                 alert('No GPS coordinates available');
                 return;
             }
-            const [lat, lng] = coords.split(',').map(s => s.trim());
-            if (lat && lng) {
-                window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
-            } else {
-                alert('Invalid GPS coordinates');
+            const parts = coords.split(',').map(s => s.trim());
+            if (parts.length >= 2) {
+                window.open(`https://www.google.com/maps?q=${parts[0]},${parts[1]}`, '_blank');
             }
         }
         
         function deleteLog(id) {
-            if (!confirm('Are you sure you want to delete this log?')) return;
-            
+            if (!confirm('Delete this log?')) return;
             database.ref('Logs/' + id).remove()
-                .then(() => {
-                    alert('Log deleted successfully');
-                    loadLogs();
-                })
-                .catch(err => {
-                    alert('Error deleting log: ' + err.message);
-                });
+                .then(() => loadLogs())
+                .catch(err => alert('Error: ' + err.message));
         }
     </script>
-</div>
 </body>
 </html>
