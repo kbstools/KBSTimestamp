@@ -114,15 +114,15 @@
             background: rgba(0,0,0,0.8);
         }
 
-        /* Watermark - on camera preview (absolute) */
+        /* Watermark - on camera preview (bottom left, stacked) */
         .watermark {
             position: absolute;
             bottom: 15px;
             left: 15px;
-            right: 15px;
             z-index: 10;
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 4px;
             align-items: flex-start;
         }
 
@@ -155,7 +155,6 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
-            text-align: right;
         }
         
         .watermark-date {
@@ -827,10 +826,9 @@
                 <div class="badge-left" id="modeBadge">FIRST IN</div>
                 <div class="badge-right" id="timeBadge">--:-- --</div>
             </div>
-            <div class="watermark-text">
-                <div class="watermark-date" id="dateDisplay">---</div>
-                <div class="watermark-address" id="addressDisplay">---</div>
-            </div>
+            <!-- Date and Address below clock -->
+            <div class="watermark-date" id="dateDisplay">---</div>
+            <div class="watermark-address" id="addressDisplay">---</div>
         </div>
     </div>
 
