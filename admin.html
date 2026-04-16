@@ -1,1536 +1,616 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Verified Time Cam</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timestamper Admin - Logs</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <style>
-        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; }
         
-        body { 
-            background: #000; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            overflow: hidden; 
-            position: relative;
-        }
-
-        /* Header Bar */
-        .header-bar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 6px 10px;
-            z-index: 20;
-            gap: 8px;
-        }
-
-        .flash-toggle {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .mode-buttons {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
-            margin-bottom: 12px;
-        }
-
-        .mode-btn {
-            padding: 10px 4px;
-            border-radius: 8px;
-            border: 2px solid #ddd;
-            font-size: 11px;
-            font-weight: 700;
-            cursor: pointer;
-            background: white;
-            color: #666;
-            transition: all 0.2s;
-            text-align: center;
-        }
-
-        .mode-btn.active {
-            background: #FFC107;
-            color: #000;
-            border-color: #FFC107;
-        }
-
-        /* Camera Container */
-        .camera-container {
-            flex: 1;
-            position: relative;
-            background: #000;
-            overflow: hidden;
-        }
-
-        #viewfinder { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover;
-        }
-
-        #viewfinder.front-camera {
-            transform: scaleX(-1);
-        }
-
-        /* Camera Switch Button */
-        .camera-switch {
-            position: absolute;
-            right: 15px;
-            bottom: 15px;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(0,0,0,0.6);
-            border: 2px solid white;
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-        }
-
-        .camera-switch:active {
-            transform: scale(0.9);
-            background: rgba(0,0,0,0.8);
-        }
-
-        /* Watermark - Bottom Left */
-        .watermark {
-            position: absolute;
-            bottom: 120px;
-            left: 15px;
-            z-index: 10;
-        }
-
-        .clock-badge {
-            display: flex;
-            align-items: center;
-            border-radius: 30px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            margin-bottom: 12px;
-        }
-
-        .badge-left {
-            background: #FFC107;
-            padding: 8px 16px;
-            font-weight: bold;
-            font-size: 14px;
-            color: #000;
-        }
-
-        .badge-right {
-            background: white;
-            padding: 8px 16px;
-            font-weight: 600;
-            font-size: 14px;
-            color: #333;
-        }
-
-        .watermark-text {
-            color: white;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.7);
-        }
-
-        .watermark-date {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .watermark-address {
-            font-size: 13px;
-            line-height: 1.4;
-            max-width: 280px;
-        }
-
-        /* Status Bar */
-        #status {
-            position: absolute;
-            top: 70px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-size: 12px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            z-index: 10;
-        }
-
-        /* Light Blue Separator */
-        .separator-bar {
-            height: 4px;
-            background: #5dade2;
-        }
-
-        /* Controls Section */
-        .controls-container {
-            background: white;
-            padding: 20px;
-            padding-bottom: calc(20px + env(safe-area-inset-bottom));
-        }
-
-        .input-group { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 10px; 
-            margin-bottom: 15px; 
-        }
-
-        select, input { 
-            width: 100%; 
-            padding: 12px; 
-            border-radius: 8px; 
-            border: 1px solid #ddd; 
-            font-size: 14px; 
-            outline: none;
-        }
-        input:focus, select:focus { border-color: #5dade2; }
-
-        .shutter-row { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            padding: 10px 0 15px; 
-        }
-
-        .shutter-btn {
-            width: 75px;
-            height: 75px;
-            border-radius: 50%;
-            border: 6px solid white;
-            background: transparent;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 0 3px #ddd, 0 4px 12px rgba(0,0,0,0.2);
-        }
-        .shutter-btn:active { transform: scale(0.95); }
-        .shutter-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .shutter-inner {
-            width: 55px;
-            height: 55px;
-            border-radius: 50%;
-            background: #333;
-        }
-
-        /* Mode Selector */
-        .mode-selector {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
-            padding: 10px 0;
-            position: relative;
-        }
-
-        .mode-item {
-            font-size: 14px;
-            color: #999;
-            font-weight: 500;
-            cursor: pointer;
-            padding: 5px 10px;
-        }
-
-        .mode-item.active {
-            color: #333;
-            font-weight: 600;
-        }
-
-        .mode-dot {
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #5dade2;
-            transition: left 0.3s ease;
-        }
-
-        /* Mode Selector Tabs */
-        .mode-tabs {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            padding-bottom: 5px;
-            position: relative;
-        }
-
-        .mode-tab {
-            font-size: 15px;
-            color: #aaa;
-            font-weight: 500;
-            cursor: pointer;
-            padding: 8px 4px;
-            border: none;
-            background: none;
-        }
-
-        .mode-tab.active {
-            color: #333;
-            font-weight: 600;
-        }
-
-        .tab-indicator {
-            position: absolute;
-            bottom: 0;
-            width: 30px;
-            height: 3px;
-            background: #5dade2;
-            border-radius: 2px;
-            transition: left 0.3s ease;
-        }
-
-        .canvas { display: none; }
-
-        /* Flash on capture */
-        .flash-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: white;
-            opacity: 0;
-            pointer-events: none;
-            z-index: 100;
-            transition: opacity 0.1s;
-        }
-
-        .flash-overlay.active {
-            opacity: 0.8;
-        }
-
-        /* Sidebar Styles */
-        .sidebar-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 200;
+        .login-overlay {
             display: none;
-        }
-
-        .sidebar-overlay.active {
-            display: block;
-        }
-
-        .sidebar {
             position: fixed;
             top: 0;
-            right: -320px;
-            width: 320px;
+            left: 0;
+            width: 100%;
             height: 100%;
-            background: white;
-            z-index: 201;
-            transition: right 0.3s ease;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .sidebar.active {
-            right: 0;
-        }
-
-        .sidebar-header {
-            padding: 15px;
-            background: #5dade2;
-            color: white;
-            display: flex;
-            justify-content: space-between;
+            background: linear-gradient(135deg, #4f46e5, #ff7e00);
+            z-index: 2000;
+            justify-content: center;
             align-items: center;
+            padding: 20px;
         }
-
-        .sidebar-header h3 {
-            margin: 0;
+        
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .login-box h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .login-box input {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
             font-size: 16px;
         }
-
-        .close-btn {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
+        .login-box input:focus {
+            outline: none;
+            border-color: #4f46e5;
         }
-
-        .sidebar-search {
-            padding: 10px 15px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .sidebar-search input {
+        .login-box button {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .add-employee {
-            padding: 10px 15px;
-            display: flex;
-            gap: 8px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .add-employee input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .add-employee button {
-            padding: 10px 15px;
-            background: #27ae60;
+            padding: 14px;
+            background: #4f46e5;
             color: white;
             border: none;
             border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .login-box button:hover {
+            background: #4338ca;
+        }
+        .login-error {
+            color: #dc3545;
+            text-align: center;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .login-error.show { display: block; }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .user-info span {
             font-size: 14px;
+        }
+        .logout-btn {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 6px;
             cursor: pointer;
         }
-
-        .employee-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
         }
-
-        .employee-item {
-            padding: 12px;
-            background: #f5f5f5;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            cursor: pointer;
+        
+        .main-content { display: none; }
+        .main-content.active { display: block; }
+        
+        header {
+            background: linear-gradient(135deg, #4f46e5, #ff7e00);
+            color: white;
+            padding: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
         }
-
-        .employee-item:hover {
-            background: #e0e0e0;
+        h1 { font-size: 1.5em; }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
         }
-
-        .employee-item .delete-btn {
-            background: #e74c3c;
-            color: white;
+        .filters select, .filters input {
+            padding: 8px 12px;
             border: none;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
+            border-radius: 6px;
             font-size: 14px;
-            cursor: pointer;
-            opacity: 0.7;
         }
-
-        .employee-item .delete-btn:hover {
-            opacity: 1;
+        .filters select { min-width: 150px; cursor: pointer; }
+        .filters input[type="date"] { cursor: pointer; }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            padding: 15px 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            flex-wrap: wrap;
         }
-
-        /* Employee Select Button */
-        .employee-select-btn {
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-value { font-weight: bold; font-size: 1.2em; color: #4f46e5; }
+        .stat-label { color: #666; font-size: 0.9em; }
+        
+        .logs-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .log-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .log-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        
+        .log-image {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #5dade2;
-            border-radius: 8px;
-            background: white;
-            font-size: 14px;
+            height: 200px;
+            object-fit: cover;
+            background: #eee;
             cursor: pointer;
-            text-align: left;
-            color: #333;
         }
-
-        .employee-select-btn span {
-            color: #999;
-        }
-
-        .employee-select-btn.selected {
-            border-color: #27ae60;
-            background: #f0fff4;
-        }
-
-        /* Confirm Popup */
-        .confirm-popup {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
-            width: 300px;
-            max-width: 90%;
-            z-index: 300;
-            display: none;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
-
-        .confirm-popup.active {
-            display: block;
-        }
-
-        .confirm-popup h3 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #333;
-        }
-
-        .confirm-info {
-            background: #f5f5f5;
-            border-radius: 10px;
+        
+        .log-details {
             padding: 15px;
-            margin-bottom: 20px;
         }
-
-        .confirm-row {
+        
+        .log-header {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #ddd;
+            align-items: flex-start;
+            margin-bottom: 10px;
         }
-
-        .confirm-row:last-child {
-            border-bottom: none;
-        }
-
-        .confirm-label {
-            color: #666;
-            font-size: 13px;
-        }
-
-        .confirm-value {
-            font-weight: 600;
+        
+        .employee-name {
+            font-weight: bold;
+            font-size: 1.1em;
             color: #333;
         }
-
-        .confirm-value.mode-first { color: #27ae60; }
-        .confirm-value.mode-breakout { color: #f39c12; }
-        .confirm-value.mode-breakin { color: #3498db; }
-        .confirm-value.mode-final { color: #e74c3c; }
-
-        .confirm-buttons {
+        
+        .mode-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .mode-first { background: #d4edda; color: #155724; }
+        .mode-breakout { background: #fff3cd; color: #856404; }
+        .mode-breakin { background: #cce5ff; color: #004085; }
+        .mode-final { background: #f8d7da; color: #721c24; }
+        .mode-other { background: #e2e3e5; color: #383d41; }
+        
+        .log-info {
+            display: grid;
+            gap: 6px;
+            font-size: 0.85em;
+            color: #555;
+        }
+        
+        .log-info-row {
+            display: flex;
+            gap: 8px;
+        }
+        .log-info-label {
+            color: #888;
+            min-width: 70px;
+        }
+        
+        .log-actions {
+            padding: 10px 15px;
+            border-top: 1px solid #eee;
             display: flex;
             gap: 10px;
         }
-
-        .confirm-buttons button {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .btn-cancel {
-            background: #e0e0e0;
-            color: #333;
-        }
-
-        .btn-confirm {
-            background: #27ae60;
-            color: white;
-        }
-
-        /* Timecard Sidebar */
-        .timecard-header {
-            padding: 15px;
-            background: #e74c3c;
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .timecard-header h3 {
-            margin: 0;
-            font-size: 16px;
-        }
-
-        .timecard-search {
-            padding: 10px 15px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .timecard-search input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .timecard-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-        }
-
-        .timecard-date-group {
-            margin-bottom: 15px;
-        }
-
-        .timecard-date-header {
-            background: #5dade2;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
-
-        .timecard-item {
-            background: #f5f5f5;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 8px;
-        }
-
-        .timecard-item .mode {
-            font-weight: 700;
-            font-size: 14px;
-            margin-bottom: 5px;
-        }
-
-        .timecard-item .details {
-            font-size: 12px;
-            color: #666;
-        }
-
-        .timecard-item .branch {
-            font-size: 11px;
-            color: #999;
-            margin-top: 4px;
-        }
-
-        .timecard-item img {
-            width: 100%;
-            border-radius: 6px;
-            margin-top: 8px;
-        }
-
-        .timecard-empty {
-            text-align: center;
-            color: #999;
-            padding: 40px;
-        }
-
-        .timecard-view-toggle {
-            padding: 10px 15px;
-            display: flex;
-            gap: 8px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .view-toggle-btn {
+        
+        .btn {
             flex: 1;
             padding: 8px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            background: white;
-            font-size: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-        }
-
-        .view-toggle-btn.active {
-            background: #5dade2;
-            color: white;
-            border-color: #5dade2;
-        }
-
-        .timecard-list.text-view .timecard-item {
-            padding: 15px;
-        }
-
-        .timecard-list.text-view .timecard-item img {
-            display: none;
-        }
-
-        .timecard-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-
-        .timecard-table th {
-            background: #5dade2;
-            color: white;
-            padding: 8px 4px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 10px;
-        }
-
-        .timecard-table th:first-child {
-            border-radius: 8px 0 0 0;
-        }
-
-        .timecard-table th:last-child {
-            border-radius: 0 8px 0 0;
-        }
-
-        .timecard-table td {
-            padding: 8px 4px;
-            text-align: center;
-            border-bottom: 1px solid #eee;
-            font-size: 11px;
-        }
-
-        .timecard-table tr:nth-child(even) {
-            background: #f9f9f9;
-        }
-
-        .timecard-table tr:hover {
-            background: #e8f4f8;
-        }
-
-        .timecard-table .date-cell {
-            font-weight: 600;
-            text-align: left;
-            padding-left: 8px;
-        }
-
-        .timecard-table .time-cell {
-            font-weight: 500;
-        }
-
-        .time-cell.first { color: #27ae60; }
-        .time-cell.breakout { color: #f39c12; }
-        .time-cell.breakin { color: #3498db; }
-        .time-cell.finalout { color: #e74c3c; }
-        .time-cell.empty { color: #ccc; }
-
-        .timecard-list.image-view .timecard-item {
-            padding: 10px;
-        }
-
-        .double-log-warning {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .double-log-warning .icon {
-            font-size: 24px;
-            margin-bottom: 5px;
-        }
-
-        .double-log-warning .text {
-            font-size: 13px;
-            color: #856404;
-        }
-
-        .header-right {
-            display: flex;
-            gap: 8px;
-        }
-
-        .header-icon-btn {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #f0f0f0;
             border: none;
+            border-radius: 6px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .btn-map { background: #4f46e5; color: white; }
+        .btn-map:hover { background: #4338ca; }
+        .btn-delete { background: #dc3545; color: white; }
+        .btn-delete:hover { background: #c82333; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
             justify-content: center;
-            font-size: 16px;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal.active { display: flex; }
+        .modal-image {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .empty svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
         }
     </style>
 </head>
 <body>
-
-    <div class="flash-overlay" id="flashOverlay"></div>
-
-    <!-- Header Bar -->
-    <div class="header-bar">
-        <div class="flash-toggle" id="flashBtn">&#9724;</div>
-        <div class="header-right">
-            <button class="header-icon-btn" onclick="openTimecard()" title="Timecard">&#128197;</button>
-            <button class="header-icon-btn" onclick="openSidebar()" title="Employees">&#128101;</button>
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h2>Admin Login</h2>
+            <div class="login-error" id="loginError">Invalid email or password</div>
+            <input type="email" id="loginEmail" placeholder="Email" />
+            <input type="password" id="loginPassword" placeholder="Password" onkeyup="if(event.key==='Enter')login()" />
+            <button onclick="login()">Sign In</button>
         </div>
     </div>
-
-    <div id="status">Waiting for GPS/Camera...</div>
-
-    <!-- Camera View -->
-    <div class="camera-container">
-        <video id="viewfinder" autoplay playsinline muted></video>
-
-        <button class="camera-switch" id="cameraSwitch" onclick="switchCamera()">&#128247;</button>
-
-        <!-- Watermark -->
-        <div class="watermark">
-            <div class="clock-badge">
-                <div class="badge-left" id="modeBadge">FIRST IN</div>
-                <div class="badge-right" id="timeBadge">--:-- --</div>
-            </div>
-            <div class="watermark-text">
-                <div class="watermark-date" id="dateDisplay">---</div>
-                <div class="watermark-address" id="addressDisplay">---</div>
-            </div>
+    
+    <header id="adminHeader" style="display:none;">
+        <h1>Timestamper Admin Logs</h1>
+        <div class="user-info">
+            <span id="userEmail"></span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </header>
+    
+    <div class="main-content" id="mainContent" style="display:none;">
+    <div id="adminContent">
+        <div class="login-box">
+            <h2>Admin Login</h2>
+            <div class="login-error" id="loginError">Invalid email or password</div>
+            <input type="email" id="loginEmail" placeholder="Email" />
+            <input type="password" id="loginPassword" placeholder="Password" onkeyup="if(event.key==='Enter')login()" />
+            <button onclick="login()">Sign In</button>
         </div>
     </div>
-
-    <!-- Separator Bar -->
-    <div class="separator-bar"></div>
-
-    <!-- Controls -->
-    <div class="controls-container">
-        <div class="input-group">
-            <select id="branchSelect">
-                <option value="">-- Select Branch --</option>
-                <option value="168M">168M</option>
-                <option value="22B">22B</option>
-                <option value="999M">999M</option>
-                <option value="DM1">DM1</option>
-                <option value="DM2">DM2</option>
-                <option value="LCM">LCM</option>
-                <option value="MCS">MCS</option>
-                <option value="MTP">MTP</option>
-                <option value="PGR">PGR</option>
-                <option value="VMP">VMP</option>
-                <option value="BDM">BDM</option>
-                <option value="BTZ">BTZ</option>
-                <option value="SLP">SLP</option>
-                <option value="ASJ">ASJ</option>
-                <option value="MLT">MLT</option>
-                <option value="PGV">PGV</option>
-                <option value="KHV">KHV</option>
-                <option value="CGS">CGS</option>
-                <option value="JL">JL</option>
-                <option value="NBB">NBB</option>
-                <option value="PLZ">PLZ</option>
-                <option value="RET">RET</option>
-                <option value="TYM">TYM</option>
-                <option value="PSG">PSG</option>
-                <option value="PITX">PITX</option>
-                <option value="SMS">SMS</option>
-                <option value="MN">MN</option>
+    
+    <div class="main-content" id="mainContent">
+        <header>
+            <h1>Timestamper Admin Logs</h1>
+            <div class="user-info">
+                <span id="userEmail"></span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </header>
+        <h1>Timestamper Admin Logs</h1>
+        <div class="filters">
+            <select id="filterBranch">
+                <option value="">All Branches</option>
             </select>
-            <button class="employee-select-btn" id="employeeSelectBtn" onclick="openSidebar()">
-                <span>Select Employee</span>
-            </button>
+            <select id="filterEmployee">
+                <option value="">All Employees</option>
+            </select>
+            <input type="date" id="filterDate" />
+            <button class="btn btn-map" onclick="applyFilters()">Filter</button>
+            <button class="btn" style="background: #6c757d; color: white;" onclick="clearFilters()">Clear</button>
         </div>
-
-        <div class="mode-buttons">
-            <button class="mode-btn active" data-mode="FIRST IN">FIRST IN</button>
-            <button class="mode-btn" data-mode="BREAK OUT">BREAK OUT</button>
-            <button class="mode-btn" data-mode="BREAK IN">BREAK IN</button>
-            <button class="mode-btn" data-mode="FINAL OUT">FINAL OUT</button>
+    </header>
+    
+    <div class="stats">
+        <div class="stat">
+            <span class="stat-value" id="totalLogs">0</span>
+            <span class="stat-label">Total Logs</span>
         </div>
-
-        <div class="shutter-row">
-            <button class="shutter-btn" id="capture-btn">
-                <div class="shutter-inner"></div>
-            </button>
+        <div class="stat">
+            <span class="stat-value" id="totalEmployees">0</span>
+            <span class="stat-label">Employees</span>
         </div>
-    </div>
-
-    <!-- Sidebar -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h3>Employee List</h3>
-            <button class="close-btn" onclick="closeSidebar()">&times;</button>
-        </div>
-        <div class="sidebar-search">
-            <input type="text" id="searchInput" placeholder="Search employees..." oninput="filterEmployees()">
-        </div>
-        <div class="add-employee">
-            <input type="text" id="newEmployeeInput" placeholder="New employee name">
-            <button onclick="addEmployee()">Add</button>
-        </div>
-        <div class="employee-list" id="employeeList"></div>
-    </div>
-
-    <!-- Timecard Sidebar -->
-    <div class="sidebar-overlay" id="timecardOverlay" onclick="closeTimecard()"></div>
-    <div class="sidebar" id="timecardSidebar">
-        <div class="timecard-header">
-            <h3>My Timecard</h3>
-            <button class="close-btn" onclick="closeTimecard()">&times;</button>
-        </div>
-        <div class="timecard-view-toggle">
-            <button class="view-toggle-btn active" onclick="setTimecardView('text')" id="viewTextBtn">
-                &#9998; Text
-            </button>
-            <button class="view-toggle-btn" onclick="setTimecardView('image')" id="viewImageBtn">
-                &#128247; Image
-            </button>
-        </div>
-        <div class="timecard-search">
-            <input type="text" id="timecardSearch" placeholder="Search by date or branch..." oninput="filterTimecards()">
-        </div>
-        <div class="timecard-list text-view" id="timecardList"></div>
-    </div>
-
-    <!-- Confirm Popup -->
-    <div class="sidebar-overlay" id="confirmOverlay" onclick="cancelCapture()"></div>
-    <div class="confirm-popup" id="confirmPopup">
-        <h3>Confirm Time Log</h3>
-        <div class="confirm-info">
-            <div class="confirm-row">
-                <span class="confirm-label">Employee:</span>
-                <span class="confirm-value" id="confirmEmployee">-</span>
-            </div>
-            <div class="confirm-row">
-                <span class="confirm-label">Branch:</span>
-                <span class="confirm-value" id="confirmBranch">-</span>
-            </div>
-            <div class="confirm-row">
-                <span class="confirm-label">Mode:</span>
-                <span class="confirm-value" id="confirmMode">-</span>
-            </div>
-            <div class="confirm-row">
-                <span class="confirm-label">Date:</span>
-                <span class="confirm-value" id="confirmDate">-</span>
-            </div>
-            <div class="confirm-row">
-                <span class="confirm-label">Time:</span>
-                <span class="confirm-value" id="confirmTime">-</span>
-            </div>
-        </div>
-        <div class="confirm-buttons">
-            <button class="btn-cancel" onclick="cancelCapture()">Cancel</button>
-            <button class="btn-confirm" onclick="confirmCapture()">Confirm</button>
+        <div class="stat">
+            <span class="stat-value" id="totalBranches">0</span>
+            <span class="stat-label">Branches</span>
         </div>
     </div>
-
-    <canvas class="canvas" id="canvas"></canvas>
-
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <div class="logs-container" id="logsContainer">
+        <div class="loading">Loading logs...</div>
+    </div>
+    
+    <div class="modal" id="imageModal" onclick="closeModal(event)">
+        <button class="modal-close">&times;</button>
+        <img class="modal-image" id="modalImage" src="" alt="Log photo" />
+    </div>
 
     <script>
-        const app = firebase.initializeApp({
-            apiKey: "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-zWjPc1T8G0I3O1R6F9V2Y4B8C0E7A",
             authDomain: "kingsbakeshopdatabase.firebaseapp.com",
-            projectId: "kingsbakeshopdatabase",
-            storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
             databaseURL: "https://kingsbakeshopdatabase-default-rtdb.firebaseio.com",
-            appId: "1:256940044664:web:abb651add27a4445ed188d"
-        });
-        const storage = firebase.storage();
+            storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
+            messagingSenderId: "123456789",
+            projectId: "kingsbakeshopdatabase"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
         const database = firebase.database();
-
-        const video = document.getElementById('viewfinder');
-        const canvas = document.getElementById('canvas');
-        const status = document.getElementById('status');
-        const captureBtn = document.getElementById('capture-btn');
-        const flashOverlay = document.getElementById('flashOverlay');
-
-        const modeBadge = document.getElementById('modeBadge');
-        const timeBadge = document.getElementById('timeBadge');
-        const dateDisplay = document.getElementById('dateDisplay');
-        const addressDisplay = document.getElementById('addressDisplay');
-
-        let currentGPS = "Acquiring...";
-        let fullAddress = "Fetching Address...";
-        let currentMode = 'clock';
-        let currentClockMode = 'FIRST IN';
-        let stream = null;
-        let currentFacing = 'environment';
-        let serverTime = null;
-        let timeZone = "PHT";
-        let isServerTimeSynced = false;
-        let serverTimeOffset = 0;
-
-        async function fetchFirebaseServerTime() {
-            try {
-                // Use Firebase server timestamp - this is server-side and cannot be manipulated
-                const ref = database.ref('.info/serverTimeOffset');
-                return new Promise((resolve) => {
-                    ref.once('value', (snapshot) => {
-                        serverTimeOffset = snapshot.val() || 0;
-                        serverTime = new Date(Date.now() + serverTimeOffset);
-                        isServerTimeSynced = true;
-                        timeZone = 'PHT';
-                        status.innerText = "Server Time Synced";
-                        resolve(serverTime);
-                    }, () => {
-                        // Fallback if Firebase server time fails
-                        serverTime = new Date();
-                        isServerTimeSynced = false;
-                        resolve(serverTime);
-                    });
-                });
-            } catch (e) {
-                serverTime = new Date();
-                isServerTimeSynced = false;
-                return serverTime;
-            }
-        }
-
-        function updateTime() {
-            if (!serverTime) {
-                serverTime = new Date(Date.now() + serverTimeOffset);
-            }
+        const storage = firebase.storage();
+        
+        let allLogs = [];
+        
+        function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorEl = document.getElementById('loginError');
             
-            const now = new Date(Date.now() + serverTimeOffset);
-            
-            const h = now.getHours();
-            const m = now.getMinutes();
-            const s = now.getSeconds();
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const hour12 = h % 12 || 12;
-            const timeStr = `${hour12}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} ${ampm}`;
-            
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-            
-            timeBadge.textContent = timeStr;
-            dateDisplay.textContent = dateStr + ' ' + timeZone;
-        }
-
-        document.querySelectorAll('.mode-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentClockMode = btn.dataset.mode;
-                modeBadge.textContent = currentClockMode;
-            });
-        });
-
-        async function switchCamera() {
-            try {
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-
-                currentFacing = currentFacing === 'environment' ? 'user' : 'environment';
-                
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: currentFacing } 
-                });
-                video.srcObject = stream;
-                
-                if (currentFacing === 'user') {
-                    video.classList.add('front-camera');
-                } else {
-                    video.classList.remove('front-camera');
-                }
-            } catch (e) {
-                console.error('Camera switch error:', e);
-                status.innerText = "Camera Error";
-            }
-        }
-
-        let flashOn = false;
-        document.getElementById('flashBtn').addEventListener('click', () => {
-            flashOn = !flashOn;
-            document.getElementById('flashBtn').innerHTML = flashOn ? '&#9723;' : '&#9724;';
-            if (stream) {
-                const track = stream.getVideoTracks()[0];
-                if (track.getCapabilities().torch) {
-                    track.applyConstraints({ advanced: [{ torch: flashOn }] });
-                }
-            }
-        });
-
-        async function startSystem() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: currentFacing } 
-                });
-                video.srcObject = stream;
-                if (currentFacing === 'user') {
-                    video.classList.add('front-camera');
-                }
-
-                navigator.geolocation.watchPosition(async (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    currentGPS = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                    try {
-                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-                        const data = await res.json();
-                        fullAddress = data.display_name;
-                        addressDisplay.textContent = fullAddress.split(',').slice(0, 4).join(', ');
-                        status.innerText = "GPS & Camera Ready";
-                    } catch (e) { 
-                        fullAddress = currentGPS;
-                        addressDisplay.textContent = currentGPS;
-                    }
-                }, (err) => { status.innerText = "GPS Error: Please enable location"; });
-            } catch (e) { status.innerText = "Camera Error: Please allow access"; }
-        }
-
-        updateTime();
-        setInterval(updateTime, 1000);
-
-        // Start fetching Firebase server time immediately
-        fetchFirebaseServerTime();
-
-        captureBtn.addEventListener('click', async () => {
-            const branch = document.getElementById('branchSelect').value;
-            const empName = selectedEmployee ? selectedEmployee.name : null;
-
-            if (!branch || !empName) {
-                alert("Please select branch and employee");
-                return;
-            }
-
-            status.innerText = "Checking records...";
-
-            const checkResult = await checkDoubleLog(empName, currentClockMode);
-            
-            if (checkResult.isDouble) {
-                const lastTime = checkResult.lastLog.time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                status.innerText = "ERROR: Already logged " + currentClockMode + " today at " + lastTime;
-                captureBtn.disabled = true;
-                setTimeout(() => {
-                    status.innerText = "Ready";
-                    captureBtn.disabled = false;
-                }, 3000);
-                return;
-            }
-
-            const now = new Date(Date.now() + serverTimeOffset);
-            const h = now.getHours();
-            const m = now.getMinutes();
-            const s = now.getSeconds();
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const hour12 = h % 12 || 12;
-            const timeStr = `${hour12}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} ${ampm}`;
-            
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-
-            document.getElementById('confirmEmployee').textContent = empName;
-            document.getElementById('confirmBranch').textContent = branch;
-            
-            const modeEl = document.getElementById('confirmMode');
-            modeEl.textContent = currentClockMode;
-            modeEl.className = 'confirm-value';
-            if (currentClockMode === 'FIRST IN') modeEl.classList.add('mode-first');
-            else if (currentClockMode === 'BREAK OUT') modeEl.classList.add('mode-breakout');
-            else if (currentClockMode === 'BREAK IN') modeEl.classList.add('mode-breakin');
-            else if (currentClockMode === 'FINAL OUT') modeEl.classList.add('mode-final');
-            
-            document.getElementById('confirmDate').textContent = dateStr;
-            document.getElementById('confirmTime').textContent = timeStr;
-
-            document.getElementById('confirmPopup').classList.add('active');
-            document.getElementById('confirmOverlay').classList.add('active');
-        });
-
-        function cancelCapture() {
-            document.getElementById('confirmPopup').classList.remove('active');
-            document.getElementById('confirmOverlay').classList.remove('active');
-        }
-
-        async function confirmCapture() {
-            document.getElementById('confirmPopup').classList.remove('active');
-            document.getElementById('confirmOverlay').classList.remove('active');
-            
-            const branch = document.getElementById('branchSelect').value;
-            const empName = selectedEmployee ? selectedEmployee.name : null;
-
-            status.innerText = "Processing...";
-            captureBtn.disabled = true;
-
-            flashOverlay.classList.add('active');
-            setTimeout(() => flashOverlay.classList.remove('active'), 150);
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-
-            const now = new Date(Date.now() + serverTimeOffset);
-            const h = now.getHours();
-            const m = now.getMinutes();
-            const s = now.getSeconds();
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const hour12 = h % 12 || 12;
-            const timeStr = `${hour12}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} ${ampm}`;
-            
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-            
-            const margin = 40;
-            const baseY = canvas.height - 80;
-
-            ctx.fillStyle = "#FFC107";
-            ctx.fillRect(margin, baseY - 160, 150, 50);
-            ctx.fillStyle = "white";
-            ctx.fillRect(margin + 150, baseY - 160, 170, 50);
-            
-            ctx.font = "bold 24px Arial";
-            ctx.fillStyle = "black";
-            ctx.fillText(currentClockMode, margin + 12, baseY - 122);
-            ctx.fillStyle = "#333";
-            ctx.fillText(timeStr, margin + 160, baseY - 122);
-
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 8;
-            ctx.fillStyle = "white";
-            
-            ctx.font = "bold 28px Arial";
-            ctx.fillText(`EMPLOYEE: ${empName.toUpperCase()}`, margin, baseY - 55);
-            
-            ctx.font = "22px Arial";
-            ctx.fillText(dateStr, margin, baseY - 5);
-
-            ctx.font = "18px Arial";
-            const addrParts = fullAddress.split(',');
-            ctx.fillText(addrParts.slice(0, 3).join(','), margin, baseY + 30);
-            ctx.fillText(addrParts.slice(3, 6).join(','), margin, baseY + 60);
-
-            try {
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                const timestamp = Date.now();
-                const fileName = `Records/${branch}/${empName}_${timestamp}.jpg`;
-                
-                const storageRef = storage.ref(fileName);
-                const snapshot = await storageRef.putString(dataUrl, 'data_url');
-                const downloadURL = await snapshot.ref.getDownloadURL();
-
-                await database.ref('Logs/' + timestamp).set({
-                    employee: empName,
-                    branch: branch,
-                    mode: currentClockMode,
-                    time: now.toISOString(),
-                    timezone: timeZone,
-                    gpsCoords: currentGPS,
-                    address: fullAddress,
-                    imageUrl: downloadURL
-                });
-
-                status.innerText = "Successfully Synced!";
-                setTimeout(() => {
-                    status.innerText = "Ready";
-                    captureBtn.disabled = false;
-                }, 3000);
-
-            } catch (err) {
-                console.error(err);
-                status.innerText = "Sync Error: Check Connection";
-                captureBtn.disabled = false;
-            }
-        }
-
-        startSystem();
-
-        let selectedEmployee = null;
-        let employees = [];
-
-        function openSidebar() {
-            document.getElementById('sidebar').classList.add('active');
-            document.getElementById('sidebarOverlay').classList.add('active');
-            loadEmployees();
-        }
-
-        function closeSidebar() {
-            document.getElementById('sidebar').classList.remove('active');
-            document.getElementById('sidebarOverlay').classList.remove('active');
-        }
-
-        function loadEmployees() {
-            const listRef = database.ref('Employees');
-            listRef.on('value', (snapshot) => {
-                employees = [];
-                const list = document.getElementById('employeeList');
-                list.innerHTML = '';
-                
-                if (!snapshot.exists()) {
-                    list.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No employees yet. Add one above.</p>';
-                    return;
-                }
-                
-                snapshot.forEach((child) => {
-                    const emp = { id: child.key, name: child.val().name };
-                    employees.push(emp);
-                });
-                
-                renderEmployeeList(employees);
-            });
-        }
-
-        function renderEmployeeList(list) {
-            const listEl = document.getElementById('employeeList');
-            listEl.innerHTML = '';
-            
-            list.forEach((emp) => {
-                const div = document.createElement('div');
-                div.className = 'employee-item';
-                if (selectedEmployee && selectedEmployee.id === emp.id) {
-                    div.style.background = '#d4edda';
-                    div.style.borderLeft = '4px solid #27ae60';
-                }
-                div.innerHTML = `<span>${emp.name}</span>`;
-                div.onclick = () => selectEmployee(emp);
-                listEl.appendChild(div);
-            });
-        }
-
-        function selectEmployee(emp) {
-            selectedEmployee = emp;
-            const btn = document.getElementById('employeeSelectBtn');
-            btn.innerHTML = `<strong>${emp.name}</strong>`;
-            btn.classList.add('selected');
-            closeSidebar();
-        }
-
-        function addEmployee() {
-            const input = document.getElementById('newEmployeeInput');
-            const name = input.value.trim();
-            
-            if (!name) {
-                alert('Please enter employee name');
+            if (!email || !password) {
+                errorEl.textContent = 'Please enter email and password';
+                errorEl.classList.add('show');
                 return;
             }
             
-            const newRef = database.ref('Employees').push();
-            newRef.set({ name: name.toUpperCase() })
+            errorEl.classList.remove('show');
+            
+            auth.signInWithEmailAndPassword(email, password)
                 .then(() => {
-                    input.value = '';
-                    loadEmployees();
+                    document.getElementById('userEmail').textContent = email;
                 })
-                .catch((err) => {
-                    alert('Error adding employee: ' + err.message);
+                .catch(err => {
+                    errorEl.textContent = err.message;
+                    errorEl.classList.add('show');
                 });
         }
-
-        function filterEmployees() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = employees.filter(emp => 
-                emp.name.toLowerCase().includes(search)
-            );
-            renderEmployeeList(filtered);
+        
+        function logout() {
+            auth.signOut();
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginPassword').value = '';
         }
-
-        let allTimecards = [];
-        let currentTimecardView = 'text';
-
-        function setTimecardView(view) {
-            currentTimecardView = view;
-            document.getElementById('viewTextBtn').classList.toggle('active', view === 'text');
-            document.getElementById('viewImageBtn').classList.toggle('active', view === 'image');
-            document.getElementById('timecardList').className = 'timecard-list ' + view + '-view';
-            renderTimecards(allTimecards);
-        }
-
-        function openTimecard() {
-            document.getElementById('timecardSidebar').classList.add('active');
-            document.getElementById('timecardOverlay').classList.add('active');
-            loadTimecards();
-        }
-
-        function closeTimecard() {
-            document.getElementById('timecardSidebar').classList.remove('active');
-            document.getElementById('timecardOverlay').classList.remove('active');
-        }
-
-        function loadTimecards() {
-            if (!selectedEmployee) {
-                document.getElementById('timecardList').innerHTML = '<div class="timecard-empty">Please select an employee first</div>';
-                return;
+        
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('adminHeader').style.display = 'flex';
+                document.getElementById('adminContent').style.display = 'block';
+                document.getElementById('userEmail').textContent = user.email;
+                init();
+            } else {
+                document.getElementById('loginOverlay').style.display = 'flex';
+                document.getElementById('adminHeader').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'none';
             }
-
-            database.ref('Logs').orderByChild('employee').equalTo(selectedEmployee.name).on('value', (snapshot) => {
-                allTimecards = [];
-                const list = document.getElementById('timecardList');
-                list.innerHTML = '';
-
-                if (!snapshot.exists()) {
-                    list.innerHTML = '<div class="timecard-empty">No time records found</div>';
-                    return;
-                }
-
+        });
+        let branches = new Set();
+        let employees = new Set();
+        
+        function init() {
+            loadLogs();
+        }
+        
+        function loadLogs() {
+            const container = document.getElementById('logsContainer');
+            container.innerHTML = '<div class="loading">Loading logs...</div>';
+            
+            database.ref('Logs').orderByChild('time').once('value', (snapshot) => {
+                allLogs = [];
+                branches.clear();
+                employees.clear();
+                
                 snapshot.forEach((child) => {
                     const log = child.val();
                     log.id = child.key;
-                    allTimecards.push(log);
+                    allLogs.push(log);
+                    if (log.branch) branches.add(log.branch);
+                    if (log.employee) employees.add(log.employee);
                 });
-
-                allTimecards.sort((a, b) => new Date(b.time) - new Date(a.time));
-                renderTimecards(allTimecards);
+                
+                allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
+                
+                populateFilters();
+                updateStats();
+                renderLogs(allLogs);
             });
         }
-
-        function renderTimecards(cards) {
-            const list = document.getElementById('timecardList');
-            list.innerHTML = '';
-
-            if (currentTimecardView === 'text') {
-                const grouped = {};
-                cards.forEach(card => {
-                    const date = new Date(card.time);
-                    const dateKey = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                    if (!grouped[dateKey]) grouped[dateKey] = {};
-                    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                    
-                    if (card.mode === 'FIRST IN') grouped[dateKey].first = timeStr;
-                    else if (card.mode === 'BREAK OUT') grouped[dateKey].breakOut = timeStr;
-                    else if (card.mode === 'BREAK IN') grouped[dateKey].breakIn = timeStr;
-                    else if (card.mode === 'FINAL OUT') grouped[dateKey].final = timeStr;
+        
+        function populateFilters() {
+            const branchSelect = document.getElementById('filterBranch');
+            const employeeSelect = document.getElementById('filterEmployee');
+            
+            branchSelect.innerHTML = '<option value="">All Branches</option>';
+            branches.forEach(branch => {
+                branchSelect.innerHTML += `<option value="${branch}">${branch}</option>`;
+            });
+            
+            employeeSelect.innerHTML = '<option value="">All Employees</option>';
+            employees.forEach(emp => {
+                employeeSelect.innerHTML += `<option value="${emp}">${emp}</option>`;
+            });
+        }
+        
+        function updateStats() {
+            document.getElementById('totalLogs').textContent = allLogs.length;
+            document.getElementById('totalEmployees').textContent = employees.size;
+            document.getElementById('totalBranches').textContent = branches.size;
+        }
+        
+        function applyFilters() {
+            const branch = document.getElementById('filterBranch').value;
+            const employee = document.getElementById('filterEmployee').value;
+            const date = document.getElementById('filterDate').value;
+            
+            let filtered = allLogs;
+            
+            if (branch) {
+                filtered = filtered.filter(log => log.branch === branch);
+            }
+            if (employee) {
+                filtered = filtered.filter(log => log.employee === employee);
+            }
+            if (date) {
+                const dateStr = date.replace(/-/g, '');
+                filtered = filtered.filter(log => {
+                    if (!log.time) return false;
+                    const logDate = new Date(log.time).toISOString().split('T')[0].replace(/-/g, '');
+                    return logDate === dateStr;
                 });
-
-                if (Object.keys(grouped).length === 0) {
-                    list.innerHTML = '<div class="timecard-empty">No time records found</div>';
-                    return;
-                }
-
-                const table = document.createElement('table');
-                table.className = 'timecard-table';
-                table.innerHTML = `
-                    <thead>
-                        <tr>
-                            <th>DATE</th>
-                            <th>FIRST IN</th>
-                            <th>BREAK OUT</th>
-                            <th>BREAK IN</th>
-                            <th>FINAL OUT</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a)).map(dateKey => {
-                            const day = grouped[dateKey];
-                            return `
-                                <tr>
-                                    <td class="date-cell">${dateKey}</td>
-                                    <td class="time-cell first">${day.first || '-'}</td>
-                                    <td class="time-cell breakout">${day.breakOut || '-'}</td>
-                                    <td class="time-cell breakin">${day.breakIn || '-'}</td>
-                                    <td class="time-cell finalout">${day.final || '-'}</td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
+            }
+            
+            renderLogs(filtered);
+        }
+        
+        function clearFilters() {
+            document.getElementById('filterBranch').value = '';
+            document.getElementById('filterEmployee').value = '';
+            document.getElementById('filterDate').value = '';
+            renderLogs(allLogs);
+        }
+        
+        function renderLogs(logs) {
+            const container = document.getElementById('logsContainer');
+            
+            if (logs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p>No logs found</p>
+                    </div>
                 `;
-                list.appendChild(table);
-            } else {
-                const grouped = {};
-                cards.forEach(card => {
-                    const date = new Date(card.time);
-                    const dateKey = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-                    if (!grouped[dateKey]) grouped[dateKey] = [];
-                    grouped[dateKey].push(card);
-                });
-
-                for (const dateKey in grouped) {
-                    const dateDiv = document.createElement('div');
-                    dateDiv.className = 'timecard-date-group';
-                    dateDiv.innerHTML = `<div class="timecard-date-header">${dateKey}</div>`;
-
-                    grouped[dateKey].forEach(card => {
-                        const time = new Date(card.time);
-                        const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                        
-                        const modeClass = card.mode === 'FIRST IN' ? 'mode-first' : 
-                                         card.mode === 'BREAK OUT' ? 'mode-breakout' :
-                                         card.mode === 'BREAK IN' ? 'mode-breakin' : 'mode-final';
-
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'timecard-item';
-                        itemDiv.innerHTML = `
-                            <div class="mode ${modeClass}">${card.mode}</div>
-                            <div class="details">${timeStr}</div>
-                            <div class="branch">${card.branch}</div>
-                            ${card.imageUrl ? `<img src="${card.imageUrl}" alt="Photo" loading="lazy">` : ''}
-                        `;
-                        dateDiv.appendChild(itemDiv);
-                    });
-
-                    list.appendChild(dateDiv);
-                }
+                return;
+            }
+            
+            container.innerHTML = logs.map(log => {
+                const time = log.time ? new Date(log.time) : new Date(log.id);
+                const timeStr = time.toLocaleString();
+                const modeClass = getModeBadgeClass(log.mode);
+                const modeDisplay = getModeDisplay(log.mode);
+                const imageUrl = log.imageUrl || '';
+                
+                return `
+                    <div class="log-card" data-id="${log.id}">
+                        <img class="log-image" src="${imageUrl}" alt="Clock ${log.mode}" onclick="openModal('${imageUrl}')" onerror="this.src='https://placehold.co/320x200?text=No+Image'" />
+                        <div class="log-details">
+                            <div class="log-header">
+                                <div class="employee-name">${log.employee || 'Unknown'}</div>
+                                <span class="mode-badge ${modeClass}">${modeDisplay}</span>
+                            </div>
+                            <div class="log-info">
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Branch:</span>
+                                    <span>${log.branch || '-'}</span>
+                                </div>
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Time:</span>
+                                    <span>${timeStr}</span>
+                                </div>
+                                <div class="log-info-row">
+                                    <span class="log-info-label">Location:</span>
+                                    <span>${log.address || log.gpsCoords || '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="log-actions">
+                            <button class="btn btn-map" onclick="openMaps('${log.gpsCoords || ''}')">Map</button>
+                            <button class="btn btn-delete" onclick="deleteLog('${log.id}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function getModeBadgeClass(mode) {
+            if (mode === 'FIRST IN') return 'mode-first';
+            if (mode === 'BREAK OUT') return 'mode-breakout';
+            if (mode === 'BREAK IN') return 'mode-breakin';
+            if (mode === 'FINAL OUT') return 'mode-final';
+            return 'mode-other';
+        }
+        
+        function getModeDisplay(mode) {
+            const modeMap = {
+                'FIRST IN': 'First In',
+                'BREAK OUT': 'Break Out',
+                'BREAK IN': 'Break In',
+                'FINAL OUT': 'Final Out'
+            };
+            return modeMap[mode] || mode || '?';
+        }
+        
+        function openModal(url) {
+            if (!url) return;
+            document.getElementById('modalImage').src = url;
+            document.getElementById('imageModal').classList.add('active');
+        }
+        
+        function closeModal(e) {
+            if (e.target.classList.contains('modal') || e.target.classList.contains('modal-close')) {
+                document.getElementById('imageModal').classList.remove('active');
             }
         }
-
-        function filterTimecards() {
-            const search = document.getElementById('timecardSearch').value.toLowerCase();
-            const filtered = allTimecards.filter(card => 
-                card.branch.toLowerCase().includes(search) ||
-                new Date(card.time).toLocaleDateString().toLowerCase().includes(search) ||
-                card.mode.toLowerCase().includes(search)
-            );
-            renderTimecards(filtered);
+        
+        function openMaps(coords) {
+            if (!coords) {
+                alert('No GPS coordinates available');
+                return;
+            }
+            const [lat, lng] = coords.split(',').map(s => s.trim());
+            if (lat && lng) {
+                window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+            } else {
+                alert('Invalid GPS coordinates');
+            }
         }
-
-        async function checkDoubleLog(empName, mode) {
-            return new Promise((resolve) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-
-                database.ref('Logs')
-                    .orderByChild('employee')
-                    .equalTo(empName)
-                    .once('value')
-                    .then((snapshot) => {
-                        if (!snapshot.exists()) {
-                            resolve({ isDouble: false });
-                            return;
-                        }
-
-                        let foundDuplicate = false;
-                        let lastLog = null;
-
-                        snapshot.forEach((child) => {
-                            const log = child.val();
-                            const logTime = new Date(log.time);
-                            
-                            if (logTime >= today && logTime < tomorrow && log.mode === mode) {
-                                foundDuplicate = true;
-                                lastLog = { time: logTime, mode: log.mode };
-                            }
-                        });
-
-                        resolve({ 
-                            isDouble: foundDuplicate, 
-                            lastLog: lastLog,
-                            recentLogs: snapshot.exists() ? Array.from(snapshot).slice(0, 5).map(c => c.val()) : []
-                        });
-                    })
-                    .catch(() => {
-                        resolve({ isDouble: false });
-                    });
-            });
+        
+        function deleteLog(id) {
+            if (!confirm('Are you sure you want to delete this log?')) return;
+            
+            database.ref('Logs/' + id).remove()
+                .then(() => {
+                    alert('Log deleted successfully');
+                    loadLogs();
+                })
+                .catch(err => {
+                    alert('Error deleting log: ' + err.message);
+                });
         }
     </script>
+</div>
 </body>
 </html>
