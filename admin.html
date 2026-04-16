@@ -361,10 +361,10 @@
         const firebaseConfig = {
             apiKey: "AIzaSyA9P-8cAkJOPKCMoDKvQfIOPRRj6sU2rIk",
             authDomain: "kingsbakeshopdatabase.firebaseapp.com",
-            databaseURL: "https://kingsbakeshopdatabase-default-rtdb.firebaseio.com",
+            projectId: "kingsbakeshopdatabase",
             storageBucket: "kingsbakeshopdatabase.firebasestorage.app",
-            messagingSenderId: "123456789",
-            projectId: "kingsbakeshopdatabase"
+            databaseURL: "https://kingsbakeshopdatabase-default-rtdb.firebaseio.com",
+            appId: "1:256940044664:web:abb651add27a4445ed188d"
         };
         
         firebase.initializeApp(firebaseConfig);
@@ -446,11 +446,13 @@
                     });
                     
                     allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
-                    console.log('Sorting done, calling renderLogs with', allLogs.length, 'logs');
+                    console.log('Sorting done, logs:', allLogs.length);
                     
                     populateFilters();
                     updateStats();
-                    renderLogs(allLogs);
+                    
+                    container.innerHTML = '<h3>Found ' + allLogs.length + ' logs</h3><pre>' + JSON.stringify(allLogs, null, 2) + '</pre>';
+                })
                 })
                 .catch((err) => {
                     console.error('Load error:', err);
