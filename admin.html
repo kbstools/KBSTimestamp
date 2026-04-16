@@ -367,10 +367,12 @@
             appId: "1:256940044664:web:abb651add27a4445ed188d"
         };
         
-        firebase.initializeApp(firebaseConfig);
+        const app = firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
-        const database = firebase.database();
-        const storage = firebase.storage();
+        const database = firebase.database(app);
+        const storage = firebase.storage(app);
+        
+        console.log('Firebase initialized');
         
         let allLogs = [];
         
@@ -424,18 +426,35 @@
             loadLogs();
         }
         
-        function loadLogs() {
+function loadLogs() {
             const container = document.getElementById('logsContainer');
-            container.innerHTML = '<div class="loading">Loading logs...</div>';
+            container.innerHTML = '<div class="loading" id="loadingMsg">Loading logs...</div>';
+            
+            setTimeout(() => {
+                document.getElementById('loadingMsg').textContent = 'Still loading...';
+            }, 3000);
             
             database.ref('Logs').once('value')
                 .then((snapshot) => {
+                    console.log('Got snapshot, exists:', snapshot.exists());
+                    const data = snapshot.val();
+                    console.log('Data:', data);
+                    container.innerHTML = '<div id="result">Snapshot loaded. Check console for data.</div>';
+                    
                     if (!snapshot.exists()) {
-                        container.innerHTML = '<div class="empty">No logs found yet</div>';
-                        populateFilters();
-                        updateStats();
+                        container.innerHTML += '<p>No logs in database</p>';
                         return;
                     }
+                    
+                    // Show first log key to verify
+                    const firstKey = Object.keys(data)[0];
+                    container.innerHTML += '<p>First log ID: ' + firstKey + '</p><pre>' + JSON.stringify(data[firstKey], null, 2) + '</pre>';
+                })
+                .catch((err) => {
+                    console.error('Error:', err);
+                    container.innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
+                });
+        }
                     
                     snapshot.forEach((child) => {
                         const log = child.val();
