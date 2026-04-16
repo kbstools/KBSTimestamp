@@ -112,11 +112,12 @@
             background: rgba(0,0,0,0.8);
         }
 
-        /* Watermark - Bottom Left */
+        /* Watermark - controls section */
         .watermark {
-            position: absolute;
-            bottom: 120px;
-            left: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
             z-index: 10;
         }
 
@@ -129,25 +130,41 @@
             margin-bottom: 12px;
         }
 
-        .badge-left {
-            background: #FFC107;
+.badge-left {
+            background: #4f46e5;
             padding: 8px 16px;
             font-weight: bold;
             font-size: 14px;
-            color: #000;
+            color: white;
         }
-
+        
         .badge-right {
-            background: white;
+            background: #f3f4f6;
             padding: 8px 16px;
             font-weight: 600;
             font-size: 14px;
             color: #333;
         }
 
-        .watermark-text {
-            color: white;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+.watermark-text {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .watermark-date {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .watermark-address {
+            font-size: 10px;
+            color: #666;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .watermark-date {
@@ -795,8 +812,14 @@
         <video id="viewfinder" autoplay playsinline muted></video>
 
         <button class="camera-switch" id="cameraSwitch" onclick="switchCamera()">&#128247;</button>
+    </div>
 
-        <!-- Watermark -->
+    <!-- Separator Bar -->
+    <div class="separator-bar"></div>
+
+    <!-- Controls -->
+    <div class="controls-container">
+        <!-- Watermark in Controls - Mode + Time + Address -->
         <div class="watermark">
             <div class="clock-badge">
                 <div class="badge-left" id="modeBadge">FIRST IN</div>
@@ -807,13 +830,7 @@
                 <div class="watermark-address" id="addressDisplay">---</div>
             </div>
         </div>
-    </div>
-
-    <!-- Separator Bar -->
-    <div class="separator-bar"></div>
-
-    <!-- Controls -->
-    <div class="controls-container">
+        
         <div class="input-group">
             <select id="branchSelect">
                 <option value="">-- Select Branch --</option>
