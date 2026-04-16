@@ -427,25 +427,31 @@
             const container = document.getElementById('logsContainer');
             container.innerHTML = '<div class="loading">Loading logs...</div>';
             
-            database.ref('Logs').orderByChild('time').once('value', (snapshot) => {
-                allLogs = [];
-                branches.clear();
-                employees.clear();
-                
-                snapshot.forEach((child) => {
-                    const log = child.val();
-                    log.id = child.key;
-                    allLogs.push(log);
-                    if (log.branch) branches.add(log.branch);
-                    if (log.employee) employees.add(log.employee);
+            database.ref('Logs').once('value')
+                .then((snapshot) => {
+                    console.log('Snapshot exists:', snapshot.exists());
+                    console.log('Snapshot val:', snapshot.val());
+                    allLogs = [];
+                    branches.clear();
+                    employees.clear();
+                    
+                    snapshot.forEach((child) => {
+                        const log = child.val();
+                        log.id = child.key;
+                        allLogs.push(log);
+                        if (log.branch) branches.add(log.branch);
+                        if (log.employee) employees.add(log.employee);
+                    });
+                    
+                    allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
+                    
+                    populateFilters();
+                    updateStats();
+                    renderLogs(allLogs);
+                })
+                .catch((err) => {
+                    container.innerHTML = '<div class="empty">Error loading logs: ' + err.message + '</div>';
                 });
-                
-                allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
-                
-                populateFilters();
-                updateStats();
-                renderLogs(allLogs);
-            });
         }
         
         function populateFilters() {
