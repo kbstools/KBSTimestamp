@@ -446,14 +446,14 @@
                     });
                     
                     allLogs.sort((a, b) => new Date(b.time) - new Date(a.time));
+                    console.log('Sorting done, calling renderLogs with', allLogs.length, 'logs');
                     
                     populateFilters();
                     updateStats();
                     renderLogs(allLogs);
-                    
-                    alert('Done! Logs: ' + allLogs.length);
                 })
                 .catch((err) => {
+                    console.error('Load error:', err);
                     container.innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
                 });
         }
@@ -512,6 +512,7 @@
         }
         
         function renderLogs(logs) {
+            console.log('renderLogs called with', logs.length, 'logs');
             const container = document.getElementById('logsContainer');
             
             if (logs.length === 0) {
