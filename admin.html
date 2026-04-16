@@ -326,7 +326,8 @@
                 <select id="filterBranch">
                     <option value="">All Branches</option>
                 </select>
-                <select id="filterEmployee">
+                <input type="text" id="employeeSearch" placeholder="Search employee..." oninput="filterEmployeeList()" style="padding:8px 12px;border:2px solid #ddd;border-radius:6px;min-width:180px;" />
+                <select id="filterEmployee" onchange="applyFilters()">
                     <option value="">All Employees</option>
                 </select>
                 <input type="date" id="filterDate" />
@@ -446,10 +447,32 @@
                 branchSelect.innerHTML += `<option value="${branch}">${branch}</option>`;
             });
             
+            window.allEmployeesList = Array.from(employees).sort();
             employeeSelect.innerHTML = '<option value="">All Employees</option>';
-            employees.forEach(emp => {
+            window.allEmployeesList.forEach(emp => {
                 employeeSelect.innerHTML += `<option value="${emp}">${emp}</option>`;
             });
+            
+            document.getElementById('employeeSearch').value = '';
+        }
+        
+        function filterEmployeeList() {
+            const search = document.getElementById('employeeSearch').value.toLowerCase();
+            const employeeSelect = document.getElementById('filterEmployee');
+            
+            employeeSelect.innerHTML = '<option value="">All Employees</option>';
+            
+            const filtered = window.allEmployeesList.filter(emp => 
+                emp.toLowerCase().includes(search)
+            );
+            
+            filtered.forEach(emp => {
+                employeeSelect.innerHTML += `<option value="${emp}">${emp}</option>`;
+            });
+            
+            if (search) {
+                employeeSelect.value = '';
+            }
         }
         
         function updateStats() {
