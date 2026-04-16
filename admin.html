@@ -420,6 +420,7 @@
         let employees = new Set();
         
         function init() {
+            console.log('init called');
             loadLogs();
         }
         
@@ -429,11 +430,12 @@
             
             database.ref('Logs').once('value')
                 .then((snapshot) => {
-                    console.log('Snapshot exists:', snapshot.exists());
-                    console.log('Snapshot val:', snapshot.val());
-                    allLogs = [];
-                    branches.clear();
-                    employees.clear();
+                    if (!snapshot.exists()) {
+                        container.innerHTML = '<div class="empty">No logs found yet</div>';
+                        populateFilters();
+                        updateStats();
+                        return;
+                    }
                     
                     snapshot.forEach((child) => {
                         const log = child.val();
@@ -448,9 +450,11 @@
                     populateFilters();
                     updateStats();
                     renderLogs(allLogs);
+                    
+                    alert('Done! Logs: ' + allLogs.length);
                 })
                 .catch((err) => {
-                    container.innerHTML = '<div class="empty">Error loading logs: ' + err.message + '</div>';
+                    container.innerHTML = '<div class="empty">Error: ' + err.message + '</div>';
                 });
         }
         
