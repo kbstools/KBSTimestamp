@@ -992,16 +992,20 @@
         let db;
         const DB_NAME = 'TimestamperOffline';
         const STORE_NAME = 'pendingLogs';
+        const EMP_STORE = 'employees';
         
         function initDB() {
-            const request = indexedDB.open(DB_NAME, 1);
+            const request = indexedDB.open(DB_NAME, 2);
             request.onupgradeneeded = (e) => {
                 db = e.target.result;
                 if (!db.objectStoreNames.contains(STORE_NAME)) {
                     db.createObjectStore(STORE_NAME, { keyPath: 'id' });
                 }
+                if (!db.objectStoreNames.contains(EMP_STORE)) {
+                    db.createObjectStore(EMP_STORE, { keyPath: 'id' });
+                }
             };
-            request.onsuccess = (e) => { db = e.target.result; };
+            request.onsuccess = (e) => { db = e.target.result; loadEmployeesFromLocal(); };
         }
         initDB();
         
@@ -1061,9 +1065,42 @@
                     if (synced > 0) {
                         status.innerText = `Synced ${synced} pending log(s)`;
                     }
+                    
+                    // Also sync pending employees
+                    syncPendingEmployees();
                     resolve();
                 });
             });
+        }
+        
+        function syncPendingEmployees() {
+            if (!db) return;
+            const tx = db.transaction(EMP_STORE, 'readwrite');
+            const store = tx.objectStore(EMP_STORE);
+            const index = store.index('id');
+            const req = index.openCursor(IDBKeyRange.startsWith('offline_'));
+            
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const emp = cursor.value;
+                    // Check if name already exists in Firebase before adding
+                    database.ref('Employees').orderByChild('name').equalTo(emp.name).once('value')
+                        .then((snapshot) => {
+                            if (!snapshot.exists()) {
+                                // Name doesn't exist, add to Firebase
+                                return database.ref('Employees').push().set({ name: emp.name });
+                            }
+                        })
+                        .then(() => {
+                            // Remove from local queue whether added or duplicate
+                            const delTx = db.transaction(EMP_STORE, 'readwrite');
+                            delTx.objectStore(EMP_STORE).delete(emp.id);
+                        })
+                        .catch(() => {})
+                        .finally(() => cursor.continue());
+                }
+            };
         }
         
         // Check connection and sync periodically
@@ -1428,22 +1465,41 @@
         function loadEmployees() {
             const listRef = database.ref('Employees');
             listRef.on('value', (snapshot) => {
-                employees = [];
                 const list = document.getElementById('employeeList');
                 list.innerHTML = '';
                 
                 if (!snapshot.exists()) {
-                    list.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No employees yet. Add one above.</p>';
+                    loadEmployeesFromLocal();
                     return;
                 }
                 
+                employees = [];
                 snapshot.forEach((child) => {
                     const emp = { id: child.key, name: child.val().name };
                     employees.push(emp);
+                    saveEmployeeToLocal(emp);
                 });
                 
                 renderEmployeeList(employees);
+            }, (err) => {
+                loadEmployeesFromLocal();
             });
+        }
+        
+        function saveEmployeeToLocal(emp) {
+            if (!db) return;
+            const tx = db.transaction(EMP_STORE, 'readwrite');
+            tx.objectStore(EMP_STORE).put(emp);
+        }
+        
+        function loadEmployeesFromLocal() {
+            if (!db) return;
+            const tx = db.transaction(EMP_STORE, 'readonly');
+            const store = tx.objectStore(EMP_STORE);
+            store.getAll().onsuccess = (e) => {
+                employees = e.target.result || [];
+                renderEmployeeList(employees);
+            };
         }
 
         function renderEmployeeList(list) {
@@ -1473,21 +1529,34 @@
 
         function addEmployee() {
             const input = document.getElementById('newEmployeeInput');
-            const name = input.value.trim();
+            const name = input.value.trim().toUpperCase();
             
             if (!name) {
                 alert('Please enter employee name');
                 return;
             }
             
+            // Check if already exists locally
+            if (employees.some(e => e.name.toUpperCase() === name)) {
+                alert('Employee already exists');
+                return;
+            }
+            
+            const empData = { name: name };
+            
             const newRef = database.ref('Employees').push();
-            newRef.set({ name: name.toUpperCase() })
+            newRef.set(empData)
                 .then(() => {
                     input.value = '';
-                    loadEmployees();
                 })
-                .catch((err) => {
-                    alert('Error adding employee: ' + err.message);
+                .catch(() => {
+                    // Offline - save locally
+                    const tempId = 'offline_' + Date.now();
+                    const emp = { id: tempId, name: name };
+                    saveEmployeeToLocal(emp);
+                    alert('Saved offline - will sync when online');
+                    loadEmployeesFromLocal();
+                    input.value = '';
                 });
         }
 
