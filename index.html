@@ -813,6 +813,9 @@
     </div>
 
     <div id="status">Waiting for GPS/Camera...</div>
+    <div id="pendingBadge" style="display:none;position:fixed;top:10px;right:10px;background:#ff9800;color:white;padding:8px 12px;border-radius:20px;font-size:12px;z-index:1000;cursor:pointer;" onclick="syncPendingLogs()">
+        <span id="pendingCount">0</span> pending
+    </div>
 
     <!-- Camera View -->
     <div class="camera-container">
@@ -974,6 +977,93 @@
         });
         const storage = firebase.storage();
         const database = firebase.database();
+        
+        // IndexedDB for offline queue
+        let db;
+        const DB_NAME = 'TimestamperOffline';
+        const STORE_NAME = 'pendingLogs';
+        
+        function initDB() {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (e) => {
+                db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                }
+            };
+            request.onsuccess = (e) => { db = e.target.result; };
+        }
+        initDB();
+        
+        function saveToOfflineQueue(log) {
+            if (!db) return;
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).add(log);
+            updatePendingCount();
+        }
+        
+        function removeFromOfflineQueue(id) {
+            if (!db) return;
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).delete(id);
+            updatePendingCount();
+        }
+        
+        function getPendingLogs(callback) {
+            if (!db) return;
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.getAll();
+            request.onsuccess = () => callback(request.result);
+        }
+        
+        function updatePendingCount() {
+            if (!db) return;
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            store.count().onsuccess = (e) => {
+                const count = e.target.result;
+                const statusEl = document.getElementById('status');
+                const badge = document.getElementById('pendingBadge');
+                const pendingCount = document.getElementById('pendingCount');
+                
+                if (count > 0) {
+                    pendingCount.textContent = count;
+                    badge.style.display = 'block';
+                    statusEl.textContent = `Offline: ${count} pending`;
+                } else {
+                    badge.style.display = 'none';
+                }
+            };
+        }
+        
+        async function syncPendingLogs() {
+            return new Promise((resolve) => {
+                getPendingLogs(async (logs) => {
+                    let synced = 0;
+                    for (const log of logs) {
+                        try {
+                            await database.ref('Logs/' + log.id).set(log.data);
+                            removeFromOfflineQueue(log.id);
+                            synced++;
+                        } catch (e) { /* skip failed */ }
+                    }
+                    if (synced > 0) {
+                        status.innerText = `Synced ${synced} pending log(s)`;
+                    }
+                    resolve();
+                });
+            });
+        }
+        
+        // Check connection and sync periodically
+        window.addEventListener('online', () => {
+            status.innerText = "Connection restored! Syncing...";
+            syncPendingLogs();
+        });
+        setInterval(() => {
+            if (navigator.onLine) syncPendingLogs();
+        }, 30000);
 
         const video = document.getElementById('viewfinder');
         const canvas = document.getElementById('canvas');
@@ -1247,11 +1337,7 @@
                 const timestamp = Date.now();
                 const fileName = `Records/${branch}/${empName}_${timestamp}.jpg`;
                 
-                const storageRef = storage.ref(fileName);
-                const snapshot = await storageRef.putString(dataUrl, 'data_url');
-                const downloadURL = await snapshot.ref.getDownloadURL();
-
-                await database.ref('Logs/' + timestamp).set({
+                const logData = {
                     employee: empName,
                     branch: branch,
                     mode: currentClockMode,
@@ -1259,10 +1345,48 @@
                     timezone: timeZone,
                     gpsCoords: currentGPS,
                     address: fullAddress,
-                    imageUrl: downloadURL
-                });
-
-                status.innerText = "Successfully Synced!";
+                    imageUrl: ''
+                };
+                
+                // Try upload with timeout
+                const uploadWithTimeout = async () => {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 15000);
+                    
+                    try {
+                        const storageRef = storage.ref(fileName);
+                        const snapshot = await storageRef.putString(dataUrl, 'data_url', { signal: controller.signal });
+                        const downloadURL = await snapshot.ref.getDownloadURL();
+                        logData.imageUrl = downloadURL;
+                        return downloadURL;
+                    } finally {
+                        clearTimeout(timeout);
+                    }
+                };
+                
+                let downloadURL = '';
+                try {
+                    downloadURL = await uploadWithTimeout();
+                } catch (uploadErr) {
+                    console.log('Upload failed, saving offline:', uploadErr.message);
+                }
+                
+                // Save to database or offline queue
+                try {
+                    logData.imageUrl = downloadURL;
+                    await database.ref('Logs/' + timestamp).set(logData);
+                    status.innerText = "Successfully Synced!";
+                } catch (dbErr) {
+                    // Save to offline queue
+                    saveToOfflineQueue({
+                        id: timestamp,
+                        data: logData,
+                        imageData: dataUrl,
+                        fileName: fileName
+                    });
+                    status.innerText = "Saved offline - will sync when online";
+                }
+                
                 setTimeout(() => {
                     status.innerText = "Ready";
                     captureBtn.disabled = false;
@@ -1270,7 +1394,7 @@
 
             } catch (err) {
                 console.error(err);
-                status.innerText = "Sync Error: Check Connection";
+                status.innerText = "Error: Check Connection";
                 captureBtn.disabled = false;
             }
         }
